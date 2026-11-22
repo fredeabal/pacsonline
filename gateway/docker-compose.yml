@@ -1,0 +1,18 @@
+services:
+  orthanc-gateway:
+    image: orthancteam/orthanc:latest
+    container_name: pacs-clinic-gateway
+    restart: unless-stopped
+    ports:
+      # Puerto DICOM local para que ecógrafos, RX, TAC o RM envíen por C-STORE
+      - "4242:4242"
+    environment:
+      ORTHANC__NAME: "GATEWAY_CLINICA"
+      ORTHANC__DICOM_AET: "${CLINIC_AET:-GATEWAY_CLINICA}"
+      ORTHANC__DICOM_PORT: "4242"
+      ORTHANC__LUA_SCRIPTS: '["/etc/orthanc/forwarder.lua"]'
+      PACS_INGEST_URL: "${PACS_INGEST_URL}"
+      PACS_CENTER_TOKEN: "${PACS_CENTER_TOKEN}"
+    volumes:
+      - ./forwarder.lua:/etc/orthanc/forwarder.lua:ro
+      - ./buffer:/var/lib/orthanc/db

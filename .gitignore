@@ -1,0 +1,34 @@
+# Variables de entorno y secretos (NUNCA subir a Git)
+.env
+.env.local
+.env.*.local
+
+# Datos persistentes de Orthanc, SQLite, backups y archivos DICOM
+data/
+backups/
+*.sqlite
+*.sqlite3
+*.db
+*.dcm
+
+# CodeIgniter 4 / PHP
+app/vendor/
+app/build/
+app/writable/logs/*
+app/writable/cache/*
+app/writable/session/*
+app/writable/uploads/*
+app/writable/debugbar/*
+!app/writable/**/.gitkeep
+
+# Certificados SSL locales
+certs/
+*.pem
+*.key
+*.crt
+
+# Sistema operativo y editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

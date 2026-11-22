@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="es" dir="ltr" data-bs-theme="light" data-color-theme="Blue_Theme" data-layout="vertical">
+<head>
+  <script {csp-script-nonce}>
+    (function() {
+      var saved = localStorage.getItem('theme');
+      var theme = saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-bs-theme', theme);
+    })();
+  </script>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PACS Online | Enlace Enviado</title>
+  <meta name="theme-color" content="#5d87ff" />
+
+  <link rel="shortcut icon" type="image/png" href="<?= base_url('assets/images/logos/favicon.png') ?>" />
+  <link rel="stylesheet" href="<?= base_url('assets/css/styles.css') ?>?v=<?= filemtime(FCPATH . 'assets/css/styles.css') ?>" />
+  <link rel="stylesheet" href="<?= base_url('assets/css/custom.css') ?>?v=<?= filemtime(FCPATH . 'assets/css/custom.css') ?>" />
+</head>
+<body>
+
+  <div id="main-wrapper" class="auth-customizer-none">
+    <div class="position-relative overflow-hidden min-vh-100 w-100">
+      <div class="position-relative z-index-5">
+        <div class="row min-vh-100 g-0">
+          <div class="col-xl-7 col-xxl-8 d-none d-xl-flex flex-column justify-content-center align-items-center bg-primary-gradient position-relative">
+            <div id="particles-js" class="position-absolute w-100 h-100 top-0 start-0 z-index-1"></div>
+
+            <div class="px-5 position-relative z-index-2 text-center text-xl-start mx-auto w-100" style="max-width: 680px;">
+              <h1 class="text-white display-4 fw-bolder mb-4" style="line-height: 1.15;">
+                Revisa tu bandeja<br>de entrada.
+              </h1>
+              <p class="text-white fs-5 mb-0 opacity-75">
+                Si tu correo está registrado en la plataforma, recibirás el enlace de acceso en unos segundos.
+              </p>
+            </div>
+          </div>
+
+          <div class="col-12 col-xl-5 col-xxl-4 bg-body d-flex justify-content-center align-items-center p-4 min-vh-100">
+            <div class="auth-max-width w-100 col-sm-8 col-md-6 col-xl-9 px-4 text-center">
+              <span class="d-inline-flex align-items-center justify-content-center rounded-circle bg-success-subtle text-success mb-4" style="width: 64px; height: 64px;">
+                <i class="ti ti-mail-check fs-8"></i>
+              </span>
+
+              <h3 class="mb-2 fw-bolder">Enlace Enviado</h3>
+              <p class="text-muted mb-4">
+                Hemos enviado un enlace temporal de acceso a tu correo electrónico. Haz clic en él para entrar directamente a tu cuenta.
+              </p>
+
+              <a href="<?= url_to('login') ?>" class="btn btn-sm btn-primary px-4">
+                <i class="ti ti-arrow-left me-1"></i> Volver a Iniciar Sesión
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="<?= base_url('assets/libs/bootstrap/dist/js/bootstrap.bundle.min.js') ?>"></script>
+  <script src="<?= base_url('assets/libs/particles.js/particles.min.js') ?>"></script>
+  <script {csp-script-nonce}>
+    if (document.getElementById('particles-js') && typeof particlesJS === 'function') {
+      particlesJS("particles-js", {
+        "particles": {
+          "number": { "value": 70, "density": { "enable": true, "value_area": 800 } },
+          "color": { "value": "#ffffff" }, "shape": { "type": "circle" },
+          "opacity": { "value": 0.45 }, "size": { "value": 3, "random": true },
+          "line_linked": { "enable": true, "distance": 150, "color": "#ffffff", "opacity": 0.35, "width": 1 },
+          "move": { "enable": true, "speed": 4, "out_mode": "out" }
+        },
+        "retina_detect": true
+      });
+    }
+  </script>
+</body>
+</html>

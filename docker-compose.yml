@@ -1,0 +1,104 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pacs-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${ORTHANC_DB_NAME:-orthanc}
+      POSTGRES_USER: ${ORTHANC_DB_USER:-orthanc}
+      POSTGRES_PASSWORD: ${ORTHANC_DB_PASSWORD:-orthanc_change_me}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ORTHANC_DB_USER:-orthanc} -d ${ORTHANC_DB_NAME:-orthanc}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - pacs-net
+
+  orthanc:
+    image: orthancteam/orthanc:latest
+    container_name: pacs-orthanc
+    restart: unless-stopped
+    environment:
+      ORTHANC__NAME: ${ORTHANC_NAME:-PACS_ONLINE}
+      ORTHANC__DICOM_AET: ${ORTHANC_AET:-PACSONLINE}
+      ORTHANC__DICOM_MODALITIES_IN_DATABASE: "true"
+      # Seguridad DICOM: valida el AET destino (Called AET) y restringe C-STORE a nodos en /centers
+      ORTHANC__DICOM_CHECK_CALLED_AET: "true"
+      ORTHANC__DICOM_ALWAYS_ALLOW_STORE: "false"
+      ORTHANC__DICOM_CHECK_MODALITY_HOST: "false"
+      # Índice en PostgreSQL; archivos DICOM guardados en ./data/orthanc
+      ORTHANC__POSTGRESQL__ENABLE_INDEX: "true"
+      ORTHANC__POSTGRESQL__ENABLE_STORAGE: "false"
+      ORTHANC__POSTGRESQL__HOST: "postgres"
+      ORTHANC__POSTGRESQL__PORT: "5432"
+      ORTHANC__POSTGRESQL__DATABASE: ${ORTHANC_DB_NAME:-orthanc}
+      ORTHANC__POSTGRESQL__USERNAME: ${ORTHANC_DB_USER:-orthanc}
+      ORTHANC__POSTGRESQL__PASSWORD: ${ORTHANC_DB_PASSWORD:-orthanc_change_me}
+      DICOM_WEB_PLUGIN_ENABLED: "true"
+      # Aislado en la red interna pacs-net (sin puertos HTTP expuestos al host)
+      ORTHANC__AUTHENTICATION_ENABLED: "false"
+      ORTHANC__DICOM_WEB__ENABLE: "true"
+      ORTHANC__DICOM_WEB__ROOT: "/dicom-web/"
+      ORTHANC__DICOM_WEB__ENABLE_WADO: "true"
+    volumes:
+      - ./data/orthanc:/var/lib/orthanc/db
+    ports:
+      - "${ORTHANC_DICOM_PORT:-4242}:4242"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - pacs-net
+
+  ohif:
+    image: ohif/app:latest
+    container_name: pacs-ohif
+    restart: unless-stopped
+    volumes:
+      - ./docker/ohif/app-config.js:/usr/share/nginx/html/app-config.js:ro
+    depends_on:
+      - orthanc
+    networks:
+      - pacs-net
+
+  php:
+    build:
+      context: ./docker/php
+    container_name: pacs-php
+    restart: unless-stopped
+    environment:
+      CI_ENVIRONMENT: ${CI_ENVIRONMENT:-development}
+      ORTHANC_URL: ${ORTHANC_URL:-http://orthanc:8042}
+      ORTHANC_AET: ${ORTHANC_AET:-PACSONLINE}
+      ORTHANC_DICOM_PORT: ${ORTHANC_DICOM_PORT:-4242}
+    volumes:
+      - ./app:/var/www/html
+      - ./data/app:/var/www/data
+      - ./data/orthanc:/var/www/orthanc-storage:ro
+    depends_on:
+      - orthanc
+    networks:
+      - pacs-net
+
+  nginx:
+    image: nginx:alpine
+    container_name: pacs-nginx
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8080}:80"
+    volumes:
+      - ./app:/var/www/html:ro
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - php
+      - ohif
+      - orthanc
+    networks:
+      - pacs-net
+
+networks:
+  pacs-net:
+    driver: bridge

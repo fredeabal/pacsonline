@@ -1,0 +1,159 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Libraries;
+
+use App\Models\AuditLogModel;
+use CodeIgniter\Shield\Entities\User;
+use Config\Services;
+
+class NotificationService
+{
+    public function sendReportPublishedEmail(string $studyUid, ?array $study, array $report): bool
+    {
+        $settings = service('settings');
+        if (! (bool) $settings->get('Smtp.enabled')) {
+            return false;
+        }
+
+        if ($study === null || empty($study['owner_user_id'])) {
+            return false;
+        }
+
+        $patient = auth()->getProvider()->findById((int) $study['owner_user_id']);
+        if ($patient === null || empty($patient->email)) {
+            return false;
+        }
+
+        $email = $this->configuredEmail();
+        $email->setTo($patient->email);
+        $email->setSubject('Tu informe médico está disponible — PACS Online');
+
+        $portalUrl = base_url('studies');
+        $body      = view('emails/report_published', [
+            'patientName'      => $patient->full_name ?: $patient->username,
+            'studyDescription' => $study['study_description'] ?? 'Estudio DICOM',
+            'reportedAt'       => format_date($report['reported_at'] ?? date('Y-m-d')),
+            'portalUrl'        => $portalUrl,
+        ]);
+
+        $email->setMessage($body);
+
+        try {
+            $pdfBytes = (new ReportPdfService())->renderBytes($studyUid, $study, $report);
+            $email->attach($pdfBytes, 'attachment', 'informe-medico.pdf', 'application/pdf');
+        } catch (\Throwable) {
+            // Si falla el adjunto, se envía igualmente el aviso con enlace al portal
+        }
+
+        if ($email->send()) {
+            AuditLogModel::record('notification.email_sent', $studyUid, null, 'Aviso enviado a ' . $patient->email);
+            return true;
+        }
+
+        AuditLogModel::record('notification.email_failed', $studyUid, null, 'Fallo al enviar a ' . $patient->email);
+        return false;
+    }
+
+    public function sendPatientWelcomeEmail(User $patient, string $tempPassword): bool
+    {
+        $settings = service('settings');
+        if (! (bool) $settings->get('Smtp.enabled') || empty($patient->email)) {
+            return false;
+        }
+
+        $email = $this->configuredEmail();
+        $email->setTo($patient->email);
+        $email->setSubject('Tus credenciales de acceso — PACS Online');
+        $email->setMessage(view('emails/patient_welcome', [
+            'patientName'  => $patient->full_name ?: $patient->username,
+            'email'        => $patient->email,
+            'tempPassword' => $tempPassword,
+            'loginUrl'     => base_url('login'),
+        ]));
+
+        if ($email->send()) {
+            AuditLogModel::record('notification.welcome_sent', null, null, 'Credenciales enviadas a ' . $patient->email);
+            return true;
+        }
+
+        AuditLogModel::record('notification.welcome_failed', null, null, 'Fallo al enviar bienvenida a ' . $patient->email);
+        return false;
+    }
+
+    public function sendStudyAssignedEmail(string $studyUid, array $study, int $doctorId): bool
+    {
+        $settings = service('settings');
+        if (! (bool) $settings->get('Smtp.enabled')) {
+            return false;
+        }
+
+        $doctor = auth()->getProvider()->findById($doctorId);
+        if ($doctor === null || empty($doctor->email)) {
+            return false;
+        }
+
+        $isUrgent = ($study['priority'] ?? 'normal') === 'urgent';
+        $subject  = ($isUrgent ? '[URGENTE] ' : '') . 'Nuevo estudio asignado — PACS Online';
+
+        $email = $this->configuredEmail();
+        $email->setTo($doctor->email);
+        $email->setSubject($subject);
+        $email->setMessage(view('emails/study_assigned', [
+            'doctorName'       => $doctor->full_name ?: $doctor->username,
+            'patientName'      => $study['patient_name'] ?? 'Paciente',
+            'studyDescription' => $study['study_description'] ?? 'Estudio DICOM',
+            'isUrgent'         => $isUrgent,
+            'clinicalNotes'    => $study['clinical_notes'] ?? '',
+            'reportUrl'        => base_url('reports/edit/' . urlencode($studyUid)),
+        ]));
+
+        if ($email->send()) {
+            AuditLogModel::record('notification.doctor_assigned_sent', $studyUid, null, 'Aviso enviado a ' . $doctor->email);
+            return true;
+        }
+
+        AuditLogModel::record('notification.doctor_assigned_failed', $studyUid, null, 'Fallo al enviar aviso a ' . $doctor->email);
+        return false;
+    }
+
+    public function sendTestEmail(string $toEmail): array
+    {
+        $email = $this->configuredEmail();
+        $email->setTo($toEmail);
+        $email->setSubject('Prueba SMTP — PACS Online');
+        $email->setMessage('<p>La configuración SMTP de <strong>PACS Online</strong> funciona correctamente.</p>');
+
+        if ($email->send()) {
+            return ['ok' => true];
+        }
+
+        return ['ok' => false, 'error' => $email->printDebugger(['headers'])];
+    }
+
+    private function configuredEmail(): \CodeIgniter\Email\Email
+    {
+        $settings = service('settings');
+        $config   = [
+            'protocol'   => 'smtp',
+            'SMTPHost'   => (string) ($settings->get('Smtp.host') ?? ''),
+            'SMTPPort'   => (int) ($settings->get('Smtp.port') ?? 587),
+            'SMTPUser'   => (string) ($settings->get('Smtp.user') ?? ''),
+            'SMTPPass'   => (string) ($settings->get('Smtp.pass') ?? ''),
+            'SMTPCrypto' => (string) ($settings->get('Smtp.crypto') ?? 'tls'),
+            'mailType'   => 'html',
+            'charset'    => 'UTF-8',
+            'newline'    => "\r\n",
+        ];
+
+        $email = Services::email();
+        $email->initialize($config);
+
+        $fromEmail = (string) ($settings->get('Smtp.fromEmail') ?? 'no-reply@pacs.local');
+        $fromName  = (string) ($settings->get('Smtp.fromName') ?? 'PACS Online');
+        $email->setFrom($fromEmail, $fromName);
+
+        return $email;
+    }
+}

@@ -10,7 +10,7 @@
 
   <div class="card-body">
     <p class="text-muted mb-4">
-      Paciente: <strong><?= esc($study['patient_name'] ?? 'Estudio DICOM') ?></strong> ·
+      Paciente: <strong><?= esc(format_patient_name($study['patient_name'] ?? null, 'Estudio DICOM')) ?></strong> ·
       Estudio: <strong><?= esc($study['study_description'] ?? 'Estudio DICOM') ?></strong>
     </p>
 

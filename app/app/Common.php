@@ -186,15 +186,34 @@ if (! function_exists('extract_patient_age')) {
     }
 }
 
+if (! function_exists('format_patient_name')) {
+    /**
+     * Limpia el formato DICOM PN (separadores `^` y `=`) en el nombre del paciente para mostrarlo legible.
+     */
+    function format_patient_name(?string $name, string $fallback = 'Anónimo'): string
+    {
+        $raw = trim((string) $name);
+        if ($raw === '') {
+            return $fallback;
+        }
+
+        // En DICOM PN el grupo alfabético va antes de `=` y los componentes se separan con `^`.
+        $alpha = explode('=', $raw)[0];
+        $clean = trim((string) preg_replace('/\s+/', ' ', str_replace('^', ' ', $alpha)));
+
+        return $clean !== '' ? $clean : $fallback;
+    }
+}
+
 if (! function_exists('format_study_description')) {
     /**
      * Formatea la descripción del estudio en mayúsculas uniformes, o devuelve un respaldo si está vacía.
      */
-    function format_study_description(?string $description, string $fallback = 'Sin descripción'): string
+    function format_study_description(?string $description, string $fallback = 'SIN DESCRIPCIÓN'): string
     {
         $clean = trim((string) $description);
         if ($clean === '') {
-            return $fallback;
+            return mb_strtoupper($fallback, 'UTF-8');
         }
 
         return mb_strtoupper($clean, 'UTF-8');
@@ -203,11 +222,11 @@ if (! function_exists('format_study_description')) {
 
 if (! function_exists('ohif_url')) {
     /**
-     * Construye la URL de apertura de OHIF Viewer forzando el idioma español y vista en cuadrícula adaptativa.
+     * Construye la URL de apertura de OHIF Viewer forzando el idioma español.
      */
     function ohif_url(string $studyUid): string
     {
-        return '/viewer/viewer?StudyInstanceUIDs=' . urlencode($studyUid) . '&hangingProtocolId=' . urlencode('@ohif/mnGrid') . '&lng=es';
+        return '/viewer/viewer?StudyInstanceUIDs=' . urlencode($studyUid) . '&lng=es';
     }
 }
 

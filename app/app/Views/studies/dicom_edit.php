@@ -3,13 +3,13 @@
 <?php /** Página dedicada para editar las etiquetas DICOM del paciente y del estudio. */ ?>
 <?php
   $patientId   = old('patient_id', (string) ($dicom['patient_id'] ?? ''));
-  $patientName = old('patient_name', (string) ($dicom['patient_name'] ?? ''));
+  $patientName = old('patient_name', format_patient_name($dicom['patient_name'] ?? null, ''));
   $birthDate   = old('patient_birth_date', (string) ($dicom['patient_birth_date'] ?? ''));
   $sex         = strtoupper(trim((string) old('patient_sex', (string) ($dicom['patient_sex'] ?? ''))));
   $studyDesc   = old('study_description', (string) ($dicom['study_description'] ?? ''));
   $studyDate   = old('study_date', (string) ($dicom['study_date'] ?? ''));
   $accession   = old('accession_number', (string) ($dicom['accession_number'] ?? ''));
-  $refPhysician = old('referring_physician_name', (string) ($dicom['referring_physician_name'] ?? ''));
+  $refPhysician = old('referring_physician_name', format_patient_name($dicom['referring_physician_name'] ?? null, ''));
   $institution = old('institution_name', (string) ($dicom['institution_name'] ?? ''));
 ?>
 <div class="card">
@@ -46,20 +46,18 @@
               <label for="dicom_patient_id" class="form-label fw-semibold">ID del paciente</label>
               <input type="text" class="form-control" id="dicom_patient_id" name="patient_id" value="<?= esc($patientId === '-' ? '' : $patientId) ?>" maxlength="64" required>
             </div>
-            <div class="row g-3">
-              <div class="col-6">
-                <label for="dicom_patient_birth_date" class="form-label fw-semibold">Fecha de nacimiento</label>
-                <input type="date" class="form-control" id="dicom_patient_birth_date" name="patient_birth_date" value="<?= esc($birthDate) ?>">
-              </div>
-              <div class="col-6">
-                <label for="dicom_patient_sex" class="form-label fw-semibold">Sexo</label>
-                <select class="form-select" id="dicom_patient_sex" name="patient_sex">
-                  <option value="" <?= $sex === '' ? 'selected' : '' ?>>Sin especificar</option>
-                  <option value="M" <?= $sex === 'M' ? 'selected' : '' ?>>M - Masculino</option>
-                  <option value="F" <?= $sex === 'F' ? 'selected' : '' ?>>F - Femenino</option>
-                  <option value="O" <?= $sex === 'O' ? 'selected' : '' ?>>O - Otro</option>
-                </select>
-              </div>
+            <div class="mb-3">
+              <label for="dicom_patient_birth_date" class="form-label fw-semibold">Fecha de nacimiento</label>
+              <input type="text" class="form-control datepicker-input" id="dicom_patient_birth_date" name="patient_birth_date" value="<?= esc(format_date($birthDate, '')) ?>" placeholder="dd/mm/aaaa" autocomplete="off">
+            </div>
+            <div>
+              <label for="dicom_patient_sex" class="form-label fw-semibold">Sexo</label>
+              <select class="form-select" id="dicom_patient_sex" name="patient_sex">
+                <option value="" <?= $sex === '' ? 'selected' : '' ?>>Sin especificar</option>
+                <option value="M" <?= $sex === 'M' ? 'selected' : '' ?>>Masculino</option>
+                <option value="F" <?= $sex === 'F' ? 'selected' : '' ?>>Femenino</option>
+                <option value="O" <?= $sex === 'O' ? 'selected' : '' ?>>Otro</option>
+              </select>
             </div>
           </div>
         </div>

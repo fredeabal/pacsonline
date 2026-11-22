@@ -30,7 +30,7 @@
       </div>
 
       <div class="bg-body-secondary rounded-3 p-3 mb-4">
-        <div class="mb-2"><strong>Paciente:</strong> <?= esc($study['patient_name'] ?? 'No especificado') ?></div>
+        <div class="mb-2"><strong>Paciente:</strong> <?= esc(format_patient_name($study['patient_name'] ?? null, 'No especificado')) ?></div>
         <div class="mb-2"><strong>Descripción:</strong> <?= esc($study['study_description'] ?? 'Estudio DICOM') ?></div>
         <div><strong>Fecha del estudio:</strong> <?= esc(format_date($study['study_date'] ?? null)) ?></div>
       </div>

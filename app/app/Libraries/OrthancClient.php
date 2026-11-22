@@ -97,13 +97,13 @@ class OrthancClient
     }
 
     /**
-     * Lista estudios paginados desde Orthanc usando /tools/find (ordenados por StudyDate DESC).
+     * Lista estudios paginados desde Orthanc usando /tools/find (ordenados por StudyDate DESC por defecto).
      *
      * @param array<string, string> $query
      *
      * @return list<array<string, mixed>>
      */
-    public function findStudiesPage(int $since = 0, int $limit = 25, array $query = []): array
+    public function findStudiesPage(int $since = 0, int $limit = 25, array $query = [], bool $orderByDate = true): array
     {
         try {
             $payload = [
@@ -113,14 +113,17 @@ class OrthancClient
                 'Limit'         => max(1, $limit),
                 'Query'         => $query === [] ? new \stdClass() : $query,
                 'CaseSensitive' => false,
-                'OrderBy'       => [
+            ];
+
+            if ($orderByDate) {
+                $payload['OrderBy'] = [
                     [
                         'Type'      => 'DicomTag',
                         'Key'       => 'StudyDate',
                         'Direction' => 'DESC',
                     ],
-                ],
-            ];
+                ];
+            }
 
             // Evita calcular ModalitiesInStudy para todo el índice en listados sin filtro de modalidad
             if (isset($query['ModalitiesInStudy'])) {
@@ -145,11 +148,100 @@ class OrthancClient
     }
 
     /**
+     * Busca estudios paginados en Orthanc combinando múltiples etiquetas DICOM (OR lógico)
+     * cuando hay texto de búsqueda, manteniendo orden por StudyDate DESC y sin duplicados.
+     *
+     * @param array<string, string> $baseQuery
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function searchStudiesPage(int $since, int $limit, string $search, array $baseQuery = []): array
+    {
+        $search = trim($search);
+        if ($search === '') {
+            return $this->findStudiesPage($since, $limit, $baseQuery);
+        }
+
+        $tagKeys = preg_match('/\d/', $search) === 1
+            ? ['PatientID', 'AccessionNumber']
+            : ['PatientName', 'AccessionNumber'];
+
+        $fetchLimit = max(1, $since + $limit);
+        $byId       = [];
+
+        foreach ($tagKeys as $tagKey) {
+            $query          = $baseQuery;
+            $query[$tagKey] = '*' . $search . '*';
+            // Sin OrderBy en Orthanc para evitar full-scan con wildcards; ordenamos en PHP.
+            foreach ($this->findStudiesPage(0, $fetchLimit, $query, false) as $study) {
+                $id = (string) ($study['ID'] ?? '');
+                if ($id !== '' && ! isset($byId[$id])) {
+                    $byId[$id] = $study;
+                }
+            }
+        }
+
+        $results = array_values($byId);
+        usort($results, static function (array $a, array $b): int {
+            $dateA = (string) ($a['MainDicomTags']['StudyDate'] ?? '');
+            $dateB = (string) ($b['MainDicomTags']['StudyDate'] ?? '');
+            return strcmp($dateB, $dateA);
+        });
+
+        return array_slice($results, max(0, $since), max(1, $limit));
+    }
+
+    /**
      * Obtiene el detalle de un paciente desde Orthanc (/patients/{id}).
      */
     public function getPatient(string $orthancPatientId): ?array
     {
         return $this->getJson('/patients/' . rawurlencode($orthancPatientId));
+    }
+
+    /**
+     * Busca un paciente en Orthanc por su etiqueta DICOM PatientID exacta (/tools/find).
+     */
+    public function findPatientByPatientId(string $patientId): ?array
+    {
+        $clean = trim($patientId);
+        if ($clean === '') {
+            return null;
+        }
+
+        try {
+            $res = $this->http->request(
+                'POST',
+                $this->baseUrl . '/tools/find',
+                $this->requestOptions([
+                    'json' => [
+                        'Level'         => 'Patient',
+                        'Expand'        => true,
+                        'Query'         => ['PatientID' => $clean],
+                        'CaseSensitive' => true,
+                        'Limit'         => 2,
+                    ],
+                ])
+            );
+            if ($res->getStatusCode() !== 200) {
+                return null;
+            }
+
+            $data = json_decode((string) $res->getBody(), true);
+            if (! is_array($data)) {
+                return null;
+            }
+
+            foreach ($data as $patient) {
+                if (is_array($patient) && trim((string) ($patient['MainDicomTags']['PatientID'] ?? '')) === $clean) {
+                    return $patient;
+                }
+            }
+
+            return null;
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     public function getStudy(string $orthancStudyId): ?array
@@ -479,7 +571,7 @@ class OrthancClient
                         'Force'       => true,
                         'Synchronous' => true,
                     ],
-                    'timeout' => 120,
+                    'timeout' => 290,
                 ])
             );
 
@@ -1043,7 +1135,7 @@ class OrthancClient
                         'Resources'   => $resources,
                         'Synchronous' => $synchronous,
                     ],
-                    'timeout' => 120,
+                    'timeout' => 290,
                 ])
             );
 

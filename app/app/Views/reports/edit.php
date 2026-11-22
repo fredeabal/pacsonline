@@ -33,7 +33,7 @@
       <div class="col-12 col-lg-5">
         <div class="text-muted text-uppercase fw-semibold mb-2" style="<?= $sectionLabelStyle ?>">Paciente</div>
         <div class="row g-3">
-          <div class="col-12"><?= $summaryBox('user', 'Paciente', (string) ($study['patient_name'] ?? 'Anónimo')) ?></div>
+          <div class="col-12"><?= $summaryBox('user', 'Paciente', format_patient_name($study['patient_name'] ?? null)) ?></div>
           <div class="col-6"><?= $summaryBox('id', 'ID Paciente', (string) ($study['patient_id'] ?? '-')) ?></div>
           <div class="col-6"><?= $summaryBox('cake', 'Edad', (string) ($study['patient_age'] ?? '-')) ?></div>
         </div>

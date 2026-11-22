@@ -251,7 +251,7 @@
             ?>
             <tr class="cursor-pointer" onclick="window.location.href='<?= $rowUrl ?>'">
               <td class="text-center"><?= esc(format_date($tags['StudyDate'] ?? null)) ?></td>
-              <td class="fw-semibold text-body"><?= esc($patient['PatientName'] ?? 'Anónimo') ?></td>
+              <td class="fw-semibold text-body"><?= esc(format_patient_name($patient['PatientName'] ?? null)) ?></td>
               <td class="text-center">
                 <span class="badge bg-primary-subtle text-primary border border-primary-subtle fs-2 fw-semibold"><?= esc($modality) ?></span>
               </td>
@@ -339,7 +339,7 @@
           <div class="card-body p-3">
             <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
               <div>
-                <strong class="d-block fw-semibold text-body"><?= esc($patient['PatientName'] ?? 'Anónimo') ?></strong>
+                <strong class="d-block fw-semibold text-body"><?= esc(format_patient_name($patient['PatientName'] ?? null)) ?></strong>
                 <span class="text-muted small"><?= esc(format_date($tags['StudyDate'] ?? null)) ?> · <?= esc(format_study_description($tags['StudyDescription'] ?? null)) ?></span>
               </div>
               <div class="dropdown dropstart" onclick="event.stopPropagation();">

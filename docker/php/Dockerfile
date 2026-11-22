@@ -35,4 +35,15 @@ RUN { \
     echo "max_execution_time = 300"; \
 } > /usr/local/etc/php/conf.d/pacs-uploads.ini
 
+# Pool PHP-FPM con más concurrencia para evitar 502 cuando hay peticiones largas a Orthanc
+RUN { \
+    echo "[www]"; \
+    echo "pm = dynamic"; \
+    echo "pm.max_children = 25"; \
+    echo "pm.start_servers = 4"; \
+    echo "pm.min_spare_servers = 2"; \
+    echo "pm.max_spare_servers = 8"; \
+    echo "pm.max_requests = 500"; \
+} > /usr/local/etc/php-fpm.d/zz-pacs-pool.conf
+
 WORKDIR /var/www/html

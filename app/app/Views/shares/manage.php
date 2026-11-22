@@ -2,7 +2,7 @@
 
 <div class="card">
   <div class="card-header bg-primary-subtle d-flex justify-content-between align-items-center">
-    <h5 class="mb-0 text-primary fw-semibold">Enlaces compartidos — <?= esc($study['patient_name'] ?? 'Estudio DICOM') ?></h5>
+    <h5 class="mb-0 text-primary fw-semibold">Enlaces compartidos — <?= esc(format_patient_name($study['patient_name'] ?? null, 'Estudio DICOM')) ?></h5>
     <div class="d-flex gap-2">
       <a href="<?= base_url('studies') ?>" class="btn btn-sm btn-outline-primary">
         <i class="ti ti-arrow-left fs-4"></i> <span class="d-none d-md-inline ms-1">Estudios</span>

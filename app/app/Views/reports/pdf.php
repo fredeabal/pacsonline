@@ -47,7 +47,7 @@
 
   <table class="meta-table">
     <tr>
-      <td><strong>Paciente:</strong> <?= esc($study['patient_name'] ?? 'No especificado') ?></td>
+      <td><strong>Paciente:</strong> <?= esc(format_patient_name($study['patient_name'] ?? null, 'No especificado')) ?></td>
       <td><strong>Fecha estudio:</strong> <?= esc(format_date($study['study_date'] ?? null)) ?></td>
     </tr>
     <tr>

@@ -61,16 +61,12 @@ class StudyController extends BaseController
         $totalStudies = null;
 
         if ($canViewAll) {
-            $query = [];
-            if ($search !== '') {
-                $tagKey         = preg_match('/\d/', $search) === 1 ? 'PatientID' : 'PatientName';
-                $query[$tagKey] = '*' . $search . '*';
-            }
+            $baseQuery = [];
             $dateRange = build_dicom_date_range($dateFrom, $dateTo);
             if ($dateRange !== null) {
-                $query['StudyDate'] = $dateRange;
+                $baseQuery['StudyDate'] = $dateRange;
             }
-            $fetched      = $orthanc->findStudiesPage($offset, $perPage + 1, $query);
+            $fetched      = $orthanc->searchStudiesPage($offset, $perPage + 1, $search, $baseQuery);
             $hasNext      = count($fetched) > $perPage;
             $rawStudies   = $hasNext ? array_slice($fetched, 0, $perPage) : $fetched;
             $totalStudies = ($search === '' && $dateRange === null) ? $orthanc->countStudies() : null;
@@ -85,9 +81,13 @@ class StudyController extends BaseController
             }
             foreach ($ownedRows as $row) {
                 $found = $orthanc->findStudyByUid((string) ($row['study_instance_uid'] ?? ''));
-                if ($found !== null && study_matches_date_range($found, $dateFrom, $dateTo)) {
-                    $rawStudies[] = $found;
+                if ($found === null || ! study_matches_date_range($found, $dateFrom, $dateTo)) {
+                    continue;
                 }
+                if ($search !== '' && ! $this->studyMatchesText($found, $search)) {
+                    continue;
+                }
+                $rawStudies[] = $found;
             }
         }
 
@@ -640,7 +640,7 @@ class StudyController extends BaseController
             ],
             'patient_birth_date' => [
                 'label' => 'Fecha de nacimiento',
-                'rules' => 'permit_empty|regex_match[/^\d{4}-\d{2}-\d{2}$/]',
+                'rules' => 'permit_empty|regex_match[/^(?:\d{2}\/\d{2}\/\d{4}|\d{4}-\d{2}-\d{2})$/]',
             ],
             'patient_sex' => [
                 'label' => 'Sexo',
@@ -703,8 +703,14 @@ class StudyController extends BaseController
             'PatientID'   => $newPid,
         ];
 
-        $birthDate = trim((string) ($data['patient_birth_date'] ?? ''));
+        $birthDate = normalize_date_filter((string) ($data['patient_birth_date'] ?? ''));
         if ($birthDate !== '') {
+            [$y, $m, $d] = array_map('intval', explode('-', $birthDate));
+            if (! checkdate($m, $d, $y)) {
+                return redirect()->back()->withInput()->with('errors', [
+                    'patient_birth_date' => 'La fecha de nacimiento no es válida.',
+                ]);
+            }
             $patientTags['PatientBirthDate'] = str_replace('-', '', $birthDate);
         }
 
@@ -745,6 +751,7 @@ class StudyController extends BaseController
         $patientInfo     = $parentPatientId !== '' ? $orthanc->getPatient($parentPatientId) : null;
         $patientStudies  = is_array($patientInfo['Studies'] ?? null) ? $patientInfo['Studies'] : [];
         $modifyAtPatient = $newPid === $oldPid && $parentPatientId !== '' && count($patientStudies) > 1;
+        $targetPatient   = $newPid !== $oldPid ? $orthanc->findPatientByPatientId($newPid) : null;
 
         if ($modifyAtPatient) {
             $result = $orthanc->modifyPatient($parentPatientId, $patientTags);
@@ -754,6 +761,22 @@ class StudyController extends BaseController
                     return redirect()->to('/studies/case/' . urlencode($studyUid))
                         ->with('error', 'Se actualizaron los datos del paciente, pero falló la actualización del estudio: ' . ($studyResult['error'] ?? 'Error desconocido'));
                 }
+            }
+        } elseif ($targetPatient !== null) {
+            // El PatientID destino ya existe en Orthanc: primero asociamos el estudio con sus tags actuales
+            // y luego actualizamos el paciente destino para mantener consistencia en todos sus estudios.
+            $existingPatientTags = is_array($targetPatient['MainDicomTags'] ?? null)
+                ? array_filter($targetPatient['MainDicomTags'], static fn ($v): bool => is_string($v) && $v !== '')
+                : ['PatientID' => $newPid];
+            $moveResult = $orthanc->modifyStudy($orthancId, array_merge($existingPatientTags, $studyTags));
+            if ($moveResult['ok']) {
+                $targetPatientOrthancId = (string) ($targetPatient['ID'] ?? '');
+                $result                 = $targetPatientOrthancId !== ''
+                    ? $orthanc->modifyPatient($targetPatientOrthancId, $patientTags)
+                    : $moveResult;
+                $modifyAtPatient        = true;
+            } else {
+                $result = $moveResult;
             }
         } else {
             $result = $orthanc->modifyStudy($orthancId, array_merge($patientTags, $studyTags));
@@ -1280,5 +1303,33 @@ class StudyController extends BaseController
         }
 
         return $result;
+    }
+
+    /**
+     * Comprueba si un estudio de Orthanc coincide con el texto de búsqueda (paciente, ID o nº de caso).
+     *
+     * @param array<string, mixed> $study
+     */
+    private function studyMatchesText(array $study, string $search): bool
+    {
+        $needle = mb_strtolower(trim($search));
+        if ($needle === '') {
+            return true;
+        }
+
+        $fields = [
+            (string) ($study['PatientMainDicomTags']['PatientName'] ?? ''),
+            (string) ($study['PatientMainDicomTags']['PatientID'] ?? ''),
+            (string) ($study['MainDicomTags']['AccessionNumber'] ?? ''),
+            (string) ($study['MainDicomTags']['StudyID'] ?? ''),
+        ];
+
+        foreach ($fields as $value) {
+            if ($value !== '' && mb_stripos($value, $needle) !== false) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

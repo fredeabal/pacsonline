@@ -46,7 +46,7 @@
       <div class="col-12">
         <div class="input-group">
           <span class="input-group-text"><i class="ti ti-search"></i></span>
-          <input type="text" id="studiesSearchInput" name="q" value="<?= esc($search ?? '') ?>" class="form-control" placeholder="Buscar por paciente o ID..." autocomplete="off">
+          <input type="text" id="studiesSearchInput" name="q" value="<?= esc($search ?? '') ?>" class="form-control" placeholder="Buscar por paciente, ID o número de caso..." autocomplete="off">
           <a href="<?= base_url('studies') ?>" id="studiesSearchClear" class="input-group-text text-muted text-decoration-none <?= (empty($search) && ($datePreset ?? 'all') === 'all') ? 'd-none' : '' ?>" title="Limpiar búsqueda"><i class="ti ti-x"></i></a>
         </div>
       </div>
@@ -95,7 +95,7 @@
             ?>
             <?php
               $patientId   = (string) ($patient['PatientID'] ?? '-');
-              $patientName = (string) ($patient['PatientName'] ?? 'Anónimo');
+              $patientName = format_patient_name($patient['PatientName'] ?? null);
               $studyDesc   = format_study_description($tags['StudyDescription'] ?? null);
             ?>
             <tr class="cursor-pointer" onclick="window.location.href='<?= base_url('studies/case/' . urlencode($uid)) ?>'">
@@ -200,7 +200,7 @@
           <div class="card-body p-3">
             <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
               <div>
-                <strong class="d-block fw-semibold text-body"><?= esc($patient['PatientName'] ?? 'Anónimo') ?></strong>
+                <strong class="d-block fw-semibold text-body"><?= esc(format_patient_name($patient['PatientName'] ?? null)) ?></strong>
                 <span class="text-muted small"><?= esc(format_date($tags['StudyDate'] ?? null)) ?> · <?= esc(format_study_description($tags['StudyDescription'] ?? null)) ?></span>
               </div>
               <div class="dropdown dropstart" onclick="event.stopPropagation();">

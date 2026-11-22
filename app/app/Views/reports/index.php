@@ -126,7 +126,7 @@
             ?>
             <?php
               $patientId   = (string) ($patient['PatientID'] ?? '-');
-              $patientName = (string) ($patient['PatientName'] ?? 'Anónimo');
+              $patientName = format_patient_name($patient['PatientName'] ?? null);
               $studyDesc   = format_study_description($tags['StudyDescription'] ?? null);
             ?>
             <tr class="cursor-pointer" onclick="window.location.href='<?= base_url('studies/case/' . urlencode($uid)) ?>'">
@@ -212,7 +212,7 @@
           <div class="card-body p-3">
             <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
               <div>
-                <strong class="d-block fw-semibold text-body"><?= esc($patient['PatientName'] ?? 'Anónimo') ?></strong>
+                <strong class="d-block fw-semibold text-body"><?= esc(format_patient_name($patient['PatientName'] ?? null)) ?></strong>
                 <span class="text-muted small"><?= esc(format_date($tags['StudyDate'] ?? null)) ?> · <?= esc(format_study_description($tags['StudyDescription'] ?? null)) ?></span>
               </div>
               <div class="dropdown dropstart" onclick="event.stopPropagation();">

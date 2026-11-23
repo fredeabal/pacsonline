@@ -6,8 +6,8 @@ namespace App\Controllers;
 
 use App\Libraries\OrthancClient;
 use App\Models\MedicalReportModel;
+use App\Models\PatientAccessLinkModel;
 use App\Models\StudyModel;
-use App\Models\StudyShareModel;
 
 /////////////////////////////////////////////////////////////////////////////////
 // Panel principal (Dashboard) adaptado según el rol: Admin, Médico o Paciente.//
@@ -26,9 +26,9 @@ class DashboardController extends BaseController
 
         $orthanc     = new OrthancClient();
         $alive       = $orthanc->isAlive();
-        $studyModel  = model(StudyModel::class);
-        $reportModel = model(MedicalReportModel::class);
-        $shareModel  = model(StudyShareModel::class);
+        $studyModel       = model(StudyModel::class);
+        $reportModel      = model(MedicalReportModel::class);
+        $patientLinkModel = model(PatientAccessLinkModel::class);
 
         if (! $isAdmin && ! $isMedico) {
             $ownedRecords = $studyModel
@@ -39,7 +39,6 @@ class DashboardController extends BaseController
 
             $ownedUids    = array_values(array_filter(array_column($ownedRecords, 'study_instance_uid')));
             $reportsByUid = $reportModel->mapByStudyUids($ownedUids);
-            $sharesByUid  = $shareModel->countActiveByStudyUids($ownedUids);
 
             $reportedCount = 0;
             $pendingCount  = 0;
@@ -79,9 +78,9 @@ class DashboardController extends BaseController
                     ];
                 }
 
+                $study                   = merge_local_study_metadata($study, $rec);
                 $study['_record']        = $rec;
                 $study['_report']        = $report;
-                $study['_active_shares'] = $sharesByUid[$uid] ?? 0;
                 $study['_report_status'] = $status;
                 $study['_priority']      = $rec['priority'] ?? 'normal';
                 $recentStudies[]         = $study;
@@ -136,10 +135,10 @@ class DashboardController extends BaseController
             }
         }
 
-        $recordsByUid  = $studyModel->mapByStudyUids($uids);
-        $reportsByUid  = $reportModel->mapByStudyUids($uids);
-        $sharesByUid   = $shareModel->countActiveByStudyUids($uids);
-        $recentStudies = [];
+        $recordsByUid      = $studyModel->mapByStudyUids($uids);
+        $reportsByUid      = $reportModel->mapByStudyUids($uids);
+        $patientLinksByUid = $patientLinkModel->countActiveByStudyUids($uids);
+        $recentStudies     = [];
 
         foreach ($recentRaw as $study) {
             $uid = $study['MainDicomTags']['StudyInstanceUID'] ?? '';
@@ -151,10 +150,11 @@ class DashboardController extends BaseController
             $report = $reportsByUid[$uid] ?? null;
             $status = $report['status'] ?? 'pending';
 
-            $study['_record']        = $record;
-            $study['_report']        = $report;
-            $study['_active_shares'] = $sharesByUid[$uid] ?? 0;
-            $study['_report_status'] = $status;
+            $study                          = merge_local_study_metadata($study, $record);
+            $study['_record']               = $record;
+            $study['_report']               = $report;
+            $study['_active_patient_links'] = $patientLinksByUid[$uid] ?? 0;
+            $study['_report_status']        = $status;
             $study['_priority']      = $record['priority'] ?? 'normal';
             $recentStudies[]         = $study;
         }

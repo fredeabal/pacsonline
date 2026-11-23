@@ -540,12 +540,63 @@ class OrthancClient
     }
 
     /**
+     * Consulta el estado de un trabajo en Orthanc (GET /jobs/{id}).
+     *
+     * @return array<string, mixed>|null
+     */
+    public function getJob(string $jobId): ?array
+    {
+        $cleanId = trim($jobId);
+        if ($cleanId === '') {
+            return null;
+        }
+
+        try {
+            $res = $this->http->request('GET', $this->baseUrl . '/jobs/' . rawurlencode($cleanId), $this->requestOptions([
+                'timeout' => 10,
+            ]));
+
+            if ($res->getStatusCode() !== 200) {
+                return null;
+            }
+
+            $decoded = json_decode((string) $res->getBody(), true);
+
+            return is_array($decoded) ? $decoded : null;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Cancela un trabajo en ejecución en Orthanc (POST /jobs/{id}/cancel).
+     */
+    public function cancelJob(string $jobId): bool
+    {
+        $cleanId = trim($jobId);
+        if ($cleanId === '') {
+            return false;
+        }
+
+        try {
+            $res = $this->http->request('POST', $this->baseUrl . '/jobs/' . rawurlencode($cleanId) . '/cancel', $this->requestOptions([
+                'timeout' => 10,
+            ]));
+
+            return $res->getStatusCode() >= 200 && $res->getStatusCode() < 300;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    /**
      * Ejecuta /modify sobre un recurso de Orthanc manteniendo StudyInstanceUID y SeriesInstanceUID.
-     * Se regenera SOPInstanceUID para que Orthanc cree nuevas instancias y KeepSource=false no borre las modificadas.
+     * Se usa Synchronous=false para que Orthanc procese las instancias mediante un trabajo en segundo plano,
+     * evitando caídas por timeout HTTP en estudios con cientos o miles de imágenes.
      *
      * @param array<string, string> $replaceTags
      *
-     * @return array{ok: bool, status: int, id: ?string, data: ?array<string, mixed>, error: ?string}
+     * @return array{ok: bool, status: int, id: ?string, data: ?array<string, mixed>, error: ?string, async?: bool}
      */
     private function modifyResource(string $path, string $resourceId, array $replaceTags): array
     {
@@ -569,9 +620,9 @@ class OrthancClient
                         'Keep'        => ['StudyInstanceUID', 'SeriesInstanceUID'],
                         'KeepSource'  => false,
                         'Force'       => true,
-                        'Synchronous' => true,
+                        'Synchronous' => false,
                     ],
-                    'timeout' => 290,
+                    'timeout' => 30,
                 ])
             );
 
@@ -580,7 +631,7 @@ class OrthancClient
             $decoded = json_decode($rawBody, true);
             $json    = is_array($decoded) ? $decoded : null;
 
-            if ($status < 200 || $status >= 300) {
+            if ($status < 200 || $status >= 300 || $json === null) {
                 return [
                     'ok'     => false,
                     'status' => $status,
@@ -590,16 +641,66 @@ class OrthancClient
                 ];
             }
 
-            $newId = isset($json['ID']) && is_string($json['ID']) && $json['ID'] !== ''
-                ? $json['ID']
-                : $resourceId;
+            $jobId = (string) ($json['ID'] ?? '');
+            if ($jobId === '') {
+                $newId = isset($json['ID']) && is_string($json['ID']) && $json['ID'] !== ''
+                    ? $json['ID']
+                    : $resourceId;
 
+                return [
+                    'ok'     => true,
+                    'status' => $status,
+                    'id'     => $newId,
+                    'data'   => $json,
+                    'error'  => null,
+                ];
+            }
+
+            // Esperar hasta 8 segundos para responder de inmediato si el estudio tiene pocas imágenes
+            $maxWaitSec = 8;
+            $start = microtime(true);
+            while ((microtime(true) - $start) < $maxWaitSec) {
+                usleep(400000); // 400ms
+                $job = $this->getJob($jobId);
+                if ($job === null) {
+                    continue;
+                }
+
+                $state = (string) ($job['State'] ?? '');
+                if ($state === 'Success') {
+                    $content = is_array($job['Content'] ?? null) ? $job['Content'] : [];
+                    $newId   = (string) ($content['ID'] ?? $resourceId);
+
+                    return [
+                        'ok'     => true,
+                        'status' => 200,
+                        'id'     => $newId !== '' ? $newId : $resourceId,
+                        'data'   => $content,
+                        'error'  => null,
+                    ];
+                }
+
+                if ($state === 'Failure') {
+                    $err = (string) ($job['ErrorDescription'] ?? 'Error desconocido');
+
+                    return [
+                        'ok'     => false,
+                        'status' => 500,
+                        'id'     => null,
+                        'data'   => $job,
+                        'error'  => 'Error en PACS: ' . $err,
+                    ];
+                }
+            }
+
+            // En estudios con muchas imágenes (> 500), el trabajo sigue corriendo en segundo plano sin fallar
             return [
                 'ok'     => true,
-                'status' => $status,
-                'id'     => $newId,
+                'status' => 202,
+                'id'     => $resourceId,
                 'data'   => $json,
                 'error'  => null,
+                'async'  => true,
             ];
         } catch (\Throwable $e) {
             log_message('error', 'Orthanc modifyResource failed: ' . $e->getMessage());

@@ -31,6 +31,11 @@
           <i class="ti ti-stethoscope"></i> Informar
         </a>
       <?php endif; ?>
+      <?php if (auth()->user()?->can('studies.view_all')): ?>
+        <a href="<?= base_url('studies/patient-access/' . urlencode($studyUid)) ?>" class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1">
+          <i class="ti ti-user-check"></i> <span class="d-none d-sm-inline">Acceso paciente</span>
+        </a>
+      <?php endif; ?>
       <a href="<?= ohif_url($studyUid) ?>" target="_blank" class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1">
         <i class="ti ti-eye"></i> Abrir en OHIF
       </a>

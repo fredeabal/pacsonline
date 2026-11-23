@@ -6,10 +6,10 @@ use App\Controllers\CenterController;
 use App\Controllers\DashboardController;
 use App\Controllers\DicomAuthController;
 use App\Controllers\HealthController;
+use App\Controllers\PatientAccessController;
 use App\Controllers\ProfileController;
 use App\Controllers\ReportController;
 use App\Controllers\SettingController;
-use App\Controllers\ShareController;
 use App\Controllers\StudyController;
 use App\Controllers\TemplateController;
 use App\Controllers\UserController;
@@ -29,9 +29,12 @@ $routes->post('api/ingest/dicom', [IngestController::class, 'dicom']);
 // Endpoint interno para Nginx auth_request (/dicom-web/)
 $routes->get('_dicom_auth', [DicomAuthController::class, 'check']);
 
-// Acceso público para médicos invitados mediante enlace compartido
-$routes->get('share/(:segment)', [ShareController::class, 'publicView']);
-$routes->post('share/(:segment)/verify', [ShareController::class, 'verifyPin']);
+// Acceso público para pacientes mediante Magic Link + Documento + Fecha de nacimiento
+$routes->get('paciente/(:segment)', [PatientAccessController::class, 'publicView']);
+$routes->post('paciente/(:segment)/verify', [PatientAccessController::class, 'verify']);
+$routes->get('paciente/(:segment)/report', [PatientAccessController::class, 'reportPdf']);
+$routes->get('paciente/(:segment)/download', [PatientAccessController::class, 'downloadZip']);
+$routes->post('paciente/(:segment)/logout', [PatientAccessController::class, 'logout']);
 
 $routes->group('', ['filter' => 'session'], static function ($routes) {
     $routes->get('/', [DashboardController::class, 'index']);
@@ -54,11 +57,11 @@ $routes->group('', ['filter' => 'session'], static function ($routes) {
     $routes->post('studies/send/(:segment)', [StudyController::class, 'sendToNode']);
     $routes->post('studies/delete/(:segment)', [StudyController::class, 'delete']);
 
-    // Compartición con PIN
-    $routes->get('studies/share/(:segment)/create', [ShareController::class, 'createForm']);
-    $routes->get('studies/share/(:segment)', [ShareController::class, 'manage']);
-    $routes->post('studies/share', [ShareController::class, 'create']);
-    $routes->post('studies/share/(:num)/revoke', [ShareController::class, 'revoke']);
+    // Acceso para pacientes (Magic Link + Documento + Fecha de nacimiento)
+    $routes->get('studies/patient-access/(:segment)/create', [PatientAccessController::class, 'createForm']);
+    $routes->get('studies/patient-access/(:segment)', [PatientAccessController::class, 'manage']);
+    $routes->post('studies/patient-access', [PatientAccessController::class, 'create']);
+    $routes->post('studies/patient-access/(:num)/revoke', [PatientAccessController::class, 'revoke']);
 
     // Informes médicos (Worklist + Editor + PDF)
     $routes->get('reports', [ReportController::class, 'index']);

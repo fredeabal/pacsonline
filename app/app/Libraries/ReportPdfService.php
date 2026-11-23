@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Libraries;
 
-use App\Models\StudyShareModel;
+use App\Models\PatientAccessLinkModel;
 use chillerlan\QRCode\Output\QRGdImagePNG;
 use chillerlan\QRCode\QRCode;
 use chillerlan\QRCode\QROptions;
@@ -47,15 +47,16 @@ class ReportPdfService
             ? auth()->getProvider()->findById((int) $report['doctor_user_id'])
             : null;
 
-        $activeShare = model(StudyShareModel::class)
+        $activeLink = model(PatientAccessLinkModel::class)
             ->where('study_instance_uid', $studyUid)
             ->where('revoked_at', null)
+            ->where('locked_at', null)
             ->orderBy('created_at', 'DESC')
             ->first();
 
         $qrDataUri = null;
-        if ($activeShare !== null && (empty($activeShare['expires_at']) || strtotime($activeShare['expires_at']) >= time())) {
-            $qrDataUri = self::generateQrDataUri(base_url('share/' . $activeShare['token']));
+        if ($activeLink !== null && (empty($activeLink['expires_at']) || strtotime((string) $activeLink['expires_at']) >= time())) {
+            $qrDataUri = self::generateQrDataUri(base_url('paciente/' . $activeLink['token']));
         }
 
         $signatureDataUri = null;

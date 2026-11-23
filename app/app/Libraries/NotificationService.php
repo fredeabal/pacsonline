@@ -118,6 +118,38 @@ class NotificationService
         return false;
     }
 
+    public function sendPatientMagicLinkEmail(
+        string $toEmail,
+        string $patientName,
+        string $studyDescription,
+        string $magicUrl,
+        string $expiresAt,
+        string $studyUid
+    ): bool {
+        $settings = service('settings');
+        if (! (bool) $settings->get('Smtp.enabled') || trim($toEmail) === '') {
+            return false;
+        }
+
+        $email = $this->configuredEmail();
+        $email->setTo($toEmail);
+        $email->setSubject('Acceso seguro a tu estudio médico — PACS Online');
+        $email->setMessage(view('emails/patient_magic_link', [
+            'patientName'      => $patientName,
+            'studyDescription' => $studyDescription,
+            'magicUrl'         => $magicUrl,
+            'expiresAt'        => format_date($expiresAt),
+        ]));
+
+        if ($email->send()) {
+            AuditLogModel::record('patient_access.email_sent', $studyUid, null, 'Magic Link enviado a ' . $toEmail);
+            return true;
+        }
+
+        AuditLogModel::record('patient_access.email_failed', $studyUid, null, 'Fallo al enviar Magic Link a ' . $toEmail);
+        return false;
+    }
+
     public function sendTestEmail(string $toEmail): array
     {
         $email = $this->configuredEmail();

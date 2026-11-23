@@ -32,13 +32,12 @@ final class AuthGroupsTest extends CIUnitTestCase
         $this->assertNotContains('settings.manage', $matrix);
     }
 
-    public function testPacienteOnlyViewsOwnAndShares(): void
+    public function testPacienteOnlyViewsOwn(): void
     {
         $config = new AuthGroups();
         $matrix = $config->matrix['paciente'];
 
         $this->assertContains('studies.view', $matrix);
-        $this->assertContains('studies.share', $matrix);
         $this->assertContains('reports.view_own', $matrix);
         $this->assertNotContains('studies.view_all', $matrix);
         $this->assertNotContains('studies.upload', $matrix);

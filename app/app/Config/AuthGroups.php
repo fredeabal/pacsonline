@@ -44,7 +44,6 @@ class AuthGroups extends ShieldAuthGroups
         'studies.view'     => 'Puede ver estudios propios',
         'studies.view_all' => 'Puede ver todos los estudios del sistema',
         'studies.upload'   => 'Puede subir estudios manualmente',
-        'studies.share'    => 'Puede compartir sus estudios mediante enlace y PIN',
         'reports.review'   => 'Puede revisar estudios y emitir informes médicos',
         'reports.view_own' => 'Puede ver y descargar sus propios informes médicos',
         'users.manage'     => 'Puede gestionar usuarios y roles',
@@ -67,7 +66,6 @@ class AuthGroups extends ShieldAuthGroups
         ],
         'paciente' => [
             'studies.view',
-            'studies.share',
             'reports.view_own',
         ],
     ];

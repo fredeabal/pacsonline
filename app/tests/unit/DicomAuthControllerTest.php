@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
+use App\Models\PatientAccessLinkModel;
 use App\Models\StudyModel;
-use App\Models\StudyShareModel;
 use CodeIgniter\Shield\Entities\User;
 use CodeIgniter\Test\CIUnitTestCase;
 use CodeIgniter\Test\DatabaseTestTrait;
@@ -30,22 +30,25 @@ final class DicomAuthControllerTest extends CIUnitTestCase
         $result->assertStatus(401);
     }
 
-    public function testGuestShareSessionAllowsOnlyMatchingStudyUid(): void
+    public function testPatientAccessSessionAllowsOnlyMatchingStudyUid(): void
     {
         $allowedUid = '1.2.826.0.1.3680043.99.1';
         $otherUid   = '1.2.826.0.1.3680043.99.2';
 
-        $shareId = model(StudyShareModel::class)->insert([
-            'study_instance_uid' => $allowedUid,
-            'created_by_user_id' => 1,
-            'token'              => 'tok_guest_99',
-            'expires_at'         => date('Y-m-d H:i:s', strtotime('+1 day')),
+        $linkId = model(PatientAccessLinkModel::class)->insert([
+            'study_instance_uid'      => $allowedUid,
+            'created_by_user_id'      => 1,
+            'token'                   => 'tok_patient_99',
+            'patient_id_hash'         => password_hash('12345678A', PASSWORD_DEFAULT),
+            'patient_birth_date_hash' => password_hash('1990-05-15', PASSWORD_DEFAULT),
+            'expires_at'              => date('Y-m-d H:i:s', strtotime('+30 days')),
         ], true);
 
         $sessionData = [
-            'share_access' => [
-                'share_id'  => (int) $shareId,
-                'study_uid' => $allowedUid,
+            'patient_access' => [
+                'link_id'     => (int) $linkId,
+                'study_uid'   => $allowedUid,
+                'unlocked_at' => time(),
             ],
         ];
 
@@ -59,7 +62,7 @@ final class DicomAuthControllerTest extends CIUnitTestCase
             ->get('_dicom_auth');
         $forbiddenResult->assertStatus(403);
 
-        model(StudyShareModel::class)->update((int) $shareId, ['revoked_at' => date('Y-m-d H:i:s')]);
+        model(PatientAccessLinkModel::class)->update((int) $linkId, ['revoked_at' => date('Y-m-d H:i:s')]);
 
         $revokedResult = $this->withSession($sessionData)
             ->withHeaders(['X-Original-URI' => "/dicom-web/studies/{$allowedUid}/metadata"])

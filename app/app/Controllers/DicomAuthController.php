@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Models\PatientAccessLinkModel;
 use App\Models\StudyModel;
-use App\Models\StudyShareModel;
 use CodeIgniter\HTTP\ResponseInterface;
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -40,19 +40,24 @@ class DicomAuthController extends BaseController
             return $this->response->setStatusCode(403);
         }
 
-        // 2. Médico invitado con enlace compartido desbloqueado en sesión
-        $shareAccess = session()->get('share_access');
-        if (is_array($shareAccess) && ! empty($shareAccess['share_id']) && ! empty($shareAccess['study_uid'])) {
-            $shareId    = (int) $shareAccess['share_id'];
-            $allowedUid = (string) $shareAccess['study_uid'];
+        // 2. Paciente verificado con Magic Link (Documento + Fecha de nacimiento)
+        $patientAccess = session()->get('patient_access');
+        if (is_array($patientAccess) && ! empty($patientAccess['link_id']) && ! empty($patientAccess['study_uid'])) {
+            $linkId     = (int) $patientAccess['link_id'];
+            $allowedUid = (string) $patientAccess['study_uid'];
+            $unlockedAt = (int) ($patientAccess['unlocked_at'] ?? 0);
 
-            if (! model(StudyShareModel::class)->isStillActive($shareId)) {
-                session()->remove('share_access');
+            if (
+                $unlockedAt <= 0
+                || (time() - $unlockedAt) > PatientAccessController::SESSION_TTL_SECONDS
+                || ! model(PatientAccessLinkModel::class)->isStillActive($linkId)
+            ) {
+                session()->remove('patient_access');
                 return $this->response->setStatusCode(401);
             }
 
-            // El invitado SOLO puede consultar peticiones que incluyan exactamente su StudyInstanceUID
-            if ($originalUri !== '' && str_contains($originalUri, $allowedUid)) {
+            $requestedUid = $this->extractStudyUid($originalUri);
+            if ($requestedUid !== null && $requestedUid === $allowedUid) {
                 return $this->response->setStatusCode(200);
             }
 

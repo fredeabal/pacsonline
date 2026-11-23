@@ -96,6 +96,7 @@ class ReportController extends BaseController
             $availableModalities[$modality] = true;
 
             $record = $recordsByUid[$uid] ?? null;
+            $study  = merge_local_study_metadata($study, $record);
             if ($scope === 'mine' && (int) ($record['assigned_doctor_id'] ?? 0) !== $userId) {
                 continue;
             }

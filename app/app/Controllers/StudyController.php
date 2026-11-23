@@ -9,9 +9,9 @@ use App\Libraries\OrthancClient;
 use App\Models\AuditLogModel;
 use App\Models\MedicalCenterModel;
 use App\Models\MedicalReportModel;
+use App\Models\PatientAccessLinkModel;
 use App\Models\StudyAttachmentModel;
 use App\Models\StudyModel;
-use App\Models\StudyShareModel;
 use CodeIgniter\HTTP\RedirectResponse;
 use CodeIgniter\HTTP\ResponseInterface;
 use CodeIgniter\Shield\Entities\User;
@@ -31,10 +31,10 @@ class StudyController extends BaseController
             return redirect()->to('/reports');
         }
 
-        $orthanc     = new OrthancClient();
-        $studyModel  = model(StudyModel::class);
-        $shareModel  = model(StudyShareModel::class);
-        $reportModel = model(MedicalReportModel::class);
+        $orthanc          = new OrthancClient();
+        $studyModel       = model(StudyModel::class);
+        $patientLinkModel = model(PatientAccessLinkModel::class);
+        $reportModel      = model(MedicalReportModel::class);
 
         $user       = auth()->user();
         $canViewAll = $user?->can('studies.view_all') ?? false;
@@ -99,9 +99,9 @@ class StudyController extends BaseController
             }
         }
 
-        $recordsByUid = $studyModel->mapByStudyUids($uids);
-        $reportsByUid = $reportModel->mapByStudyUids($uids);
-        $sharesByUid  = $shareModel->countActiveByStudyUids($uids);
+        $recordsByUid      = $studyModel->mapByStudyUids($uids);
+        $reportsByUid      = $reportModel->mapByStudyUids($uids);
+        $patientLinksByUid = $patientLinkModel->countActiveByStudyUids($uids);
 
         $studies = [];
         foreach ($rawStudies as $study) {
@@ -110,8 +110,10 @@ class StudyController extends BaseController
                 continue;
             }
 
-            $study['_active_shares'] = $sharesByUid[$uid] ?? 0;
-            $study['_record']        = $recordsByUid[$uid] ?? null;
+            $record                         = $recordsByUid[$uid] ?? null;
+            $study                          = merge_local_study_metadata($study, $record);
+            $study['_active_patient_links'] = $patientLinksByUid[$uid] ?? 0;
+            $study['_record']               = $record;
             $study['_report']        = $reportsByUid[$uid] ?? null;
             $studies[]               = $study;
         }
@@ -605,7 +607,7 @@ class StudyController extends BaseController
                 'patient_id'               => (string) ($pTags['PatientID'] ?? ''),
                 'patient_birth_date'       => $this->formatDicomBirthDateForInput((string) ($pTags['PatientBirthDate'] ?? '')),
                 'patient_sex'              => strtoupper(trim((string) ($pTags['PatientSex'] ?? ''))),
-                'study_description'        => (string) ($sTags['StudyDescription'] ?? ($record['study_description'] ?? '')),
+                'study_description'        => trim((string) ($sTags['StudyDescription'] ?? '')) !== '' ? (string) $sTags['StudyDescription'] : (string) ($record['study_description'] ?? ''),
                 'study_date'               => $this->formatDicomBirthDateForInput((string) ($sTags['StudyDate'] ?? ($record['study_date'] ?? ''))),
                 'accession_number'         => (string) ($sTags['AccessionNumber'] ?? ''),
                 'referring_physician_name' => (string) ($sTags['ReferringPhysicianName'] ?? ''),
@@ -748,36 +750,14 @@ class StudyController extends BaseController
         }
 
         $parentPatientId = trim((string) ($info['ParentPatient'] ?? ''));
-        $patientInfo     = $parentPatientId !== '' ? $orthanc->getPatient($parentPatientId) : null;
-        $patientStudies  = is_array($patientInfo['Studies'] ?? null) ? $patientInfo['Studies'] : [];
-        $modifyAtPatient = $newPid === $oldPid && $parentPatientId !== '' && count($patientStudies) > 1;
         $targetPatient   = $newPid !== $oldPid ? $orthanc->findPatientByPatientId($newPid) : null;
 
-        if ($modifyAtPatient) {
-            $result = $orthanc->modifyPatient($parentPatientId, $patientTags);
-            if ($result['ok'] && $studyTags !== []) {
-                $studyResult = $orthanc->modifyStudy($orthancId, $studyTags);
-                if (! $studyResult['ok']) {
-                    return redirect()->to('/studies/case/' . urlencode($studyUid))
-                        ->with('error', 'Se actualizaron los datos del paciente, pero falló la actualización del estudio: ' . ($studyResult['error'] ?? 'Error desconocido'));
-                }
-            }
-        } elseif ($targetPatient !== null) {
-            // El PatientID destino ya existe en Orthanc: primero asociamos el estudio con sus tags actuales
-            // y luego actualizamos el paciente destino para mantener consistencia en todos sus estudios.
+        if ($targetPatient !== null) {
+            // El PatientID destino ya existe en Orthanc: asociamos el estudio con los tags del paciente destino
             $existingPatientTags = is_array($targetPatient['MainDicomTags'] ?? null)
                 ? array_filter($targetPatient['MainDicomTags'], static fn ($v): bool => is_string($v) && $v !== '')
                 : ['PatientID' => $newPid];
-            $moveResult = $orthanc->modifyStudy($orthancId, array_merge($existingPatientTags, $studyTags));
-            if ($moveResult['ok']) {
-                $targetPatientOrthancId = (string) ($targetPatient['ID'] ?? '');
-                $result                 = $targetPatientOrthancId !== ''
-                    ? $orthanc->modifyPatient($targetPatientOrthancId, $patientTags)
-                    : $moveResult;
-                $modifyAtPatient        = true;
-            } else {
-                $result = $moveResult;
-            }
+            $result = $orthanc->modifyStudy($orthancId, array_merge($existingPatientTags, $studyTags));
         } else {
             $result = $orthanc->modifyStudy($orthancId, array_merge($patientTags, $studyTags));
         }
@@ -788,26 +768,7 @@ class StudyController extends BaseController
         }
 
         $refreshed    = $orthanc->findStudyByUid($studyUid);
-        $newOrthancId = (string) ($refreshed['ID'] ?? ($modifyAtPatient ? $orthancId : ($result['id'] ?? $orthancId)));
-
-        if ($modifyAtPatient) {
-            $newPatientId = (string) ($result['id'] ?? $parentPatientId);
-            $newPatient   = $orthanc->getPatient($newPatientId);
-            foreach ((array) ($newPatient['Studies'] ?? []) as $pStudyId) {
-                $pStudy = $orthanc->getStudy((string) $pStudyId);
-                $pUid   = (string) ($pStudy['MainDicomTags']['StudyInstanceUID'] ?? '');
-                if ($pUid === '') {
-                    continue;
-                }
-                $existing = $studyModel->findByStudyUid($pUid);
-                if ($existing !== null) {
-                    $studyModel->update((int) $existing['id'], [
-                        'orthanc_id'   => (string) $pStudyId,
-                        'patient_name' => $newName,
-                    ]);
-                }
-            }
-        }
+        $newOrthancId = (string) ($refreshed['ID'] ?? ($result['id'] ?? $orthancId));
 
         $finalStudyDesc = $newDesc !== '' ? $newDesc : ($info['MainDicomTags']['StudyDescription'] ?? 'Sin descripción');
         $finalStudyDate = $studyTags['StudyDate'] ?? ($info['MainDicomTags']['StudyDate'] ?? null);
@@ -838,8 +799,12 @@ class StudyController extends BaseController
             $this->request
         );
 
+        $msg = ! empty($result['async'])
+            ? 'Datos guardados. Actualizando DICOM en segundo plano.'
+            : 'Datos DICOM actualizados.';
+
         return redirect()->to('/studies/case/' . urlencode($studyUid))
-            ->with('message', 'Datos DICOM actualizados correctamente.');
+            ->with('message', $msg);
     }
 
     /**
@@ -1162,7 +1127,7 @@ class StudyController extends BaseController
         $attModel->where('study_instance_uid', $studyUid)->delete();
 
         model(MedicalReportModel::class)->where('study_instance_uid', $studyUid)->delete();
-        model(StudyShareModel::class)->where('study_instance_uid', $studyUid)->delete();
+        model(PatientAccessLinkModel::class)->where('study_instance_uid', $studyUid)->delete();
         $studyModel->where('study_instance_uid', $studyUid)->delete();
 
         AuditLogModel::record('study.deleted', $studyUid, null, 'Estudio eliminado por administrador', $this->request);

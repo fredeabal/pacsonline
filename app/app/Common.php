@@ -337,3 +337,37 @@ if (! function_exists('study_matches_date_range')) {
         return true;
     }
 }
+
+if (! function_exists('merge_local_study_metadata')) {
+    /**
+     * Superpone los metadatos editados localmente en BD (`studies`) sobre los tags de Orthanc
+     * para que las listas reflejen de inmediato cambios mientras Orthanc termina trabajos en segundo plano.
+     *
+     * @param array<string, mixed>      $study
+     * @param array<string, mixed>|null $record
+     * @return array<string, mixed>
+     */
+    function merge_local_study_metadata(array $study, ?array $record): array
+    {
+        if ($record === null) {
+            return $study;
+        }
+
+        $localDesc = trim((string) ($record['study_description'] ?? ''));
+        if ($localDesc !== '' && mb_strtolower($localDesc, 'UTF-8') !== 'sin descripción') {
+            $study['MainDicomTags']['StudyDescription'] = $localDesc;
+        }
+
+        $localName = trim((string) ($record['patient_name'] ?? ''));
+        if ($localName !== '' && mb_strtolower($localName, 'UTF-8') !== 'anónimo') {
+            $study['PatientMainDicomTags']['PatientName'] = $localName;
+        }
+
+        $localDate = trim((string) ($record['study_date'] ?? ''));
+        if ($localDate !== '' && empty($study['MainDicomTags']['StudyDate'])) {
+            $study['MainDicomTags']['StudyDate'] = $localDate;
+        }
+
+        return $study;
+    }
+}

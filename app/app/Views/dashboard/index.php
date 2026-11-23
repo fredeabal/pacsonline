@@ -294,10 +294,10 @@
                         </a>
                       </li>
                     <?php endif; ?>
-                    <?php if (auth()->user()?->can('studies.share')): ?>
+                    <?php if (auth()->user()?->can('studies.view_all')): ?>
                       <li>
-                        <a class="dropdown-item d-flex align-items-center gap-2" href="<?= base_url('studies/share/' . urlencode($uid)) ?>">
-                          <i class="ti ti-share fs-5"></i> Compartir con PIN<?= ! empty($study['_active_shares']) ? ' (' . (int) $study['_active_shares'] . ')' : '' ?>
+                        <a class="dropdown-item d-flex align-items-center gap-2" href="<?= base_url('studies/patient-access/' . urlencode($uid)) ?>">
+                          <i class="ti ti-user-check fs-5"></i> Acceso paciente<?= ! empty($study['_active_patient_links']) ? ' (' . (int) $study['_active_patient_links'] . ')' : '' ?>
                         </a>
                       </li>
                     <?php endif; ?>
@@ -371,10 +371,10 @@
                       </a>
                     </li>
                   <?php endif; ?>
-                  <?php if (auth()->user()?->can('studies.share')): ?>
+                  <?php if (auth()->user()?->can('studies.view_all')): ?>
                     <li>
-                      <a class="dropdown-item d-flex align-items-center gap-2" href="<?= base_url('studies/share/' . urlencode($uid)) ?>">
-                        <i class="ti ti-share fs-5"></i> Compartir con PIN
+                      <a class="dropdown-item d-flex align-items-center gap-2" href="<?= base_url('studies/patient-access/' . urlencode($uid)) ?>">
+                        <i class="ti ti-user-check fs-5"></i> Acceso paciente<?= ! empty($study['_active_patient_links']) ? ' (' . (int) $study['_active_patient_links'] . ')' : '' ?>
                       </a>
                     </li>
                   <?php endif; ?>

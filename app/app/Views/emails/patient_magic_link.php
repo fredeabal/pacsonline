@@ -8,7 +8,7 @@
     <h2 style="color: #5d87ff; margin-top: 0;">PACS Online — Acceso a tu Estudio</h2>
     <p>Hola <strong><?= esc($patientName) ?></strong>,</p>
     <p>Tu estudio médico (<strong><?= esc($studyDescription) ?></strong>) ya está disponible para consulta y descarga de forma segura.</p>
-    <p>Para acceder a las imágenes y a tu informe médico, pulsa el siguiente botón e introduce tu <strong>número de documento de identidad</strong> y tu <strong>fecha de nacimiento</strong>:</p>
+    <p>Para acceder a las imágenes y a tu informe médico, pulsa el siguiente botón e introduce tu <strong>número de identificación</strong> y tu <strong>fecha de nacimiento</strong>:</p>
     <p style="margin: 24px 0; text-align: center;">
       <a href="<?= esc($magicUrl, 'attr') ?>" style="background: #5d87ff; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; display: inline-block;">
         Acceder a Mi Estudio

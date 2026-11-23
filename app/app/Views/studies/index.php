@@ -45,7 +45,10 @@
       </div>
       <div class="col-12">
         <div class="input-group">
-          <span class="input-group-text"><i class="ti ti-search"></i></span>
+          <span class="input-group-text" id="studiesSearchIconWrap">
+            <i class="ti ti-search" id="studiesSearchIcon"></i>
+            <span class="spinner-border spinner-border-sm text-primary d-none" id="studiesSearchSpinner" role="status" aria-label="Buscando..."></span>
+          </span>
           <input type="text" id="studiesSearchInput" name="q" value="<?= esc($search ?? '') ?>" class="form-control" placeholder="Buscar por paciente, ID o número de caso..." autocomplete="off">
           <a href="<?= base_url('studies') ?>" id="studiesSearchClear" class="input-group-text text-muted text-decoration-none <?= (empty($search) && ($datePreset ?? 'all') === 'all') ? 'd-none' : '' ?>" title="Limpiar búsqueda"><i class="ti ti-x"></i></a>
         </div>
@@ -141,7 +144,14 @@
                         </a>
                       </li>
                     <?php endif; ?>
-                    <?php if (auth()->user()?->can('studies.view_all')): ?>
+                    <?php if (auth()->user()?->can('reports.review')): ?>
+                      <li>
+                        <a class="dropdown-item d-flex align-items-center gap-2" href="<?= base_url('reports/edit/' . urlencode($uid)) ?>">
+                          <i class="ti ti-stethoscope fs-5"></i> Informar estudio
+                        </a>
+                      </li>
+                    <?php endif; ?>
+                    <?php if (auth()->user()?->can('studies.share')): ?>
                       <li>
                         <a class="dropdown-item d-flex align-items-center gap-2" href="<?= base_url('studies/patient-access/' . urlencode($uid)) ?>">
                           <i class="ti ti-user-check fs-5"></i> Acceso paciente<?= ! empty($study['_active_patient_links']) ? ' (' . (int) $study['_active_patient_links'] . ')' : '' ?>
@@ -153,7 +163,7 @@
                         <i class="ti ti-download fs-5"></i> Descargar DICOM (.zip)
                       </a>
                     </li>
-                    <?php if (auth()->user()?->can('users.manage')): ?>
+                    <?php if (auth()->user()?->can('studies.delete')): ?>
                       <li><hr class="dropdown-divider"></li>
                       <li>
                         <form action="<?= base_url('studies/delete/' . urlencode($uid)) ?>" method="post" class="delete-study-form m-0">
@@ -225,7 +235,14 @@
                       </a>
                     </li>
                   <?php endif; ?>
-                  <?php if (auth()->user()?->can('studies.view_all')): ?>
+                  <?php if (auth()->user()?->can('reports.review')): ?>
+                    <li>
+                      <a class="dropdown-item d-flex align-items-center gap-2" href="<?= base_url('reports/edit/' . urlencode($uid)) ?>">
+                        <i class="ti ti-stethoscope fs-5"></i> Informar estudio
+                      </a>
+                    </li>
+                  <?php endif; ?>
+                  <?php if (auth()->user()?->can('studies.share')): ?>
                     <li>
                       <a class="dropdown-item d-flex align-items-center gap-2" href="<?= base_url('studies/patient-access/' . urlencode($uid)) ?>">
                         <i class="ti ti-user-check fs-5"></i> Acceso paciente<?= ! empty($study['_active_patient_links']) ? ' (' . (int) $study['_active_patient_links'] . ')' : '' ?>
@@ -237,7 +254,7 @@
                       <i class="ti ti-download fs-5"></i> Descargar DICOM (.zip)
                     </a>
                   </li>
-                  <?php if (auth()->user()?->can('users.manage')): ?>
+                  <?php if (auth()->user()?->can('studies.delete')): ?>
                     <li><hr class="dropdown-divider"></li>
                     <li>
                       <form action="<?= base_url('studies/delete/' . urlencode($uid)) ?>" method="post" class="delete-study-form m-0">
@@ -293,9 +310,17 @@
     var dateFromInput = document.getElementById('studiesDateFrom');
     var dateToInput = document.getElementById('studiesDateTo');
     var clearBtn = document.getElementById('studiesSearchClear');
+    var searchIcon = document.getElementById('studiesSearchIcon');
+    var searchSpinner = document.getElementById('studiesSearchSpinner');
     var results = document.getElementById('studiesResults');
     var timer = null;
     var controller = null;
+
+    function setSearching(active) {
+      if (searchIcon) searchIcon.classList.toggle('d-none', active);
+      if (searchSpinner) searchSpinner.classList.toggle('d-none', !active);
+      if (results) results.style.opacity = active ? '0.6' : '1';
+    }
 
     function runSearch() {
       if (!form || !input || !results) return;
@@ -313,18 +338,19 @@
       var url = form.action + (qs !== '' ? '?' + qs : '');
       if (controller) controller.abort();
       controller = new AbortController();
-      results.style.opacity = '0.6';
+      var currentController = controller;
+      setSearching(true);
       fetch(url, { signal: controller.signal, headers: { 'X-Requested-With': 'XMLHttpRequest' } })
         .then(function(r) { return r.text(); })
         .then(function(html) {
           var doc = new DOMParser().parseFromString(html, 'text/html');
           var next = doc.getElementById('studiesResults');
           if (next) results.innerHTML = next.innerHTML;
-          results.style.opacity = '1';
+          if (controller === currentController) setSearching(false);
           history.replaceState(null, '', url);
         })
         .catch(function(err) {
-          if (err.name !== 'AbortError') results.style.opacity = '1';
+          if (err.name !== 'AbortError' && controller === currentController) setSearching(false);
         });
     }
 

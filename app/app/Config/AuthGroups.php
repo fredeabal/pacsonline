@@ -23,38 +23,48 @@ class AuthGroups extends ShieldAuthGroups
      * --------------------------------------------------------------------
      * The group that a newly registered user is added to.
      */
-    public string $defaultGroup = 'paciente';
+    public string $defaultGroup = 'observador';
 
     public array $groups = [
         'admin' => [
-            'title'       => 'Administrador',
-            'description' => 'Configuración, usuarios, auditoría y subida/asignación manual de estudios.',
+            'title'       => 'Supervisor',
+            'description' => 'Control total: configuración, usuarios, informes médicos, plantillas, edición DICOM, reenvío y eliminación.',
         ],
         'medico' => [
             'title'       => 'Médico Informante',
-            'description' => 'Revisa estudios en worklist y emite informes médicos.',
+            'description' => 'Revisa estudios en worklist, emite informes médicos, gestiona plantillas y enlaces de paciente.',
         ],
-        'paciente' => [
-            'title'       => 'Paciente',
-            'description' => 'Visualiza únicamente sus propios estudios, informes médicos y comparte sus casos.',
+        'usuario' => [
+            'title'       => 'Usuario',
+            'description' => 'Visualiza estudios, reenvía a nodos DICOM, crea links de envío y realiza tareas operativas básicas sin eliminar.',
+        ],
+        'observador' => [
+            'title'       => 'Observador',
+            'description' => 'Solo consulta: visualiza casos, visor DICOM e informes médicos publicados.',
         ],
     ];
 
     public array $permissions = [
-        'studies.view'     => 'Puede ver estudios propios',
-        'studies.view_all' => 'Puede ver todos los estudios del sistema',
-        'studies.upload'   => 'Puede subir estudios manualmente',
-        'reports.review'   => 'Puede revisar estudios y emitir informes médicos',
-        'reports.view_own' => 'Puede ver y descargar sus propios informes médicos',
-        'users.manage'     => 'Puede gestionar usuarios y roles',
-        'audit.view'       => 'Puede consultar registros de auditoría',
-        'settings.manage'  => 'Puede configurar parámetros del sistema',
+        'studies.view'        => 'Puede ver estudios',
+        'studies.view_all'    => 'Puede ver todos los estudios del sistema',
+        'studies.upload'      => 'Puede subir estudios manualmente',
+        'studies.assign'      => 'Puede asignar médico, prioridad y editar motivo de consulta',
+        'studies.send'        => 'Puede reenviar estudios a nodos DICOM',
+        'studies.share'       => 'Puede crear y gestionar links de envío a pacientes',
+        'studies.attachments' => 'Puede subir documentos adjuntos a los casos',
+        'studies.edit_dicom'  => 'Puede modificar etiquetas DICOM en Orthanc',
+        'studies.delete'      => 'Puede eliminar estudios, adjuntos y enlaces revocados',
+        'reports.review'      => 'Puede revisar estudios, emitir informes médicos y gestionar plantillas',
+        'reports.view_own'    => 'Puede ver y descargar informes médicos',
+        'users.manage'        => 'Puede gestionar usuarios y roles',
+        'audit.view'          => 'Puede consultar registros de auditoría',
+        'settings.manage'     => 'Puede configurar parámetros del sistema',
     ];
 
     public array $matrix = [
         'admin' => [
             'studies.*',
-            'reports.view_own',
+            'reports.*',
             'users.*',
             'audit.*',
             'settings.*',
@@ -62,10 +72,24 @@ class AuthGroups extends ShieldAuthGroups
         'medico' => [
             'studies.view',
             'studies.view_all',
+            'studies.share',
+            'studies.attachments',
             'reports.review',
+            'reports.view_own',
         ],
-        'paciente' => [
+        'usuario' => [
             'studies.view',
+            'studies.view_all',
+            'studies.upload',
+            'studies.assign',
+            'studies.send',
+            'studies.share',
+            'studies.attachments',
+            'reports.view_own',
+        ],
+        'observador' => [
+            'studies.view',
+            'studies.view_all',
             'reports.view_own',
         ],
     ];

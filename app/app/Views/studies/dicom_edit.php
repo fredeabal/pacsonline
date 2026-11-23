@@ -15,7 +15,7 @@
 <div class="card">
   <div class="card-header bg-primary-subtle d-flex flex-wrap justify-content-between align-items-center gap-2">
     <h5 class="mb-0 text-primary fw-semibold">
-      <i class="ti ti-user-edit me-1"></i> Editar datos DICOM
+      <i class="ti ti-edit me-1"></i> Editar datos DICOM
     </h5>
     <a href="<?= base_url('studies/case/' . urlencode($studyUid)) ?>" class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1">
       <i class="ti ti-arrow-left"></i> Volver al caso
@@ -74,7 +74,7 @@
             <div class="row g-3 mb-3">
               <div class="col-6">
                 <label for="dicom_study_date" class="form-label fw-semibold">Fecha del estudio</label>
-                <input type="date" class="form-control" id="dicom_study_date" name="study_date" value="<?= esc($studyDate) ?>">
+                <input type="text" class="form-control datepicker-input" id="dicom_study_date" name="study_date" value="<?= esc(format_date($studyDate, '')) ?>" placeholder="dd/mm/aaaa" autocomplete="off">
               </div>
               <div class="col-6">
                 <label for="dicom_accession_number" class="form-label fw-semibold">Número de acceso</label>

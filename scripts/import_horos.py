@@ -6,6 +6,7 @@ with bounded in-flight futures and uploads them to Orthanc (/instances).
 """
 
 import concurrent.futures
+import errno
 import http.client
 import os
 import sys
@@ -28,6 +29,7 @@ _ORTHANC_PORT = _PARSED_URL.port or 8042
 _BASE_PATH = _PARSED_URL.path.rstrip("/")
 _THREAD_LOCAL = threading.local()
 _ERROR_LOCK = threading.Lock()
+_MOUNT_LOST = threading.Event()
 
 
 def load_done_shards() -> set[str]:
@@ -68,6 +70,8 @@ def _reset_conn() -> None:
 
 
 def upload_dicom(path: Path) -> bool:
+    if _MOUNT_LOST.is_set():
+        return False
     try:
         size = path.stat().st_size
         if size == 0:
@@ -97,6 +101,11 @@ def upload_dicom(path: Path) -> bool:
                 if attempt == 1:
                     raise
         return False
+    except OSError as exc:
+        if exc.errno in (errno.ENOTCONN, errno.EIO, errno.ESTALE):
+            _MOUNT_LOST.set()
+        log_error(path, str(exc))
+        return False
     except Exception as exc:
         log_error(path, str(exc))
         return False
@@ -108,8 +117,16 @@ def list_shard_dirs() -> list[Path]:
     return dirs
 
 
+def _raise_walk_error(err: OSError) -> None:
+    if err.errno in (errno.ENOTCONN, errno.EIO, errno.ESTALE):
+        _MOUNT_LOST.set()
+    raise err
+
+
 def iter_dcm_files(shard: Path):
-    for root, _, filenames in os.walk(shard):
+    for root, _, filenames in os.walk(shard, onerror=_raise_walk_error):
+        if _MOUNT_LOST.is_set():
+            break
         for name in filenames:
             if name.lower().endswith(".dcm"):
                 yield Path(root) / name
@@ -121,6 +138,8 @@ def process_shard(pool: concurrent.futures.ThreadPoolExecutor, shard: Path, max_
     in_flight: set[concurrent.futures.Future[bool]] = set()
 
     for path in iter_dcm_files(shard):
+        if _MOUNT_LOST.is_set():
+            break
         in_flight.add(pool.submit(upload_dicom, path))
         if len(in_flight) >= max_in_flight:
             done, in_flight = concurrent.futures.wait(
@@ -164,10 +183,29 @@ def main() -> int:
     with concurrent.futures.ThreadPoolExecutor(max_workers=WORKERS) as pool:
         for idx, shard in enumerate(shards, start=1):
             t0 = time.monotonic()
-            ok, err = process_shard(pool, shard, max_in_flight)
+            try:
+                ok, err = process_shard(pool, shard, max_in_flight)
+            except OSError as exc:
+                print(
+                    f"[FATAL] Source mount error on shard={shard.name}: {exc}. "
+                    f"Stopping without marking shard done.",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                return 3
+
             total_ok += ok
             total_err += err
             elapsed = time.monotonic() - t0
+
+            if _MOUNT_LOST.is_set():
+                print(
+                    f"[FATAL] Source mount disconnected during shard={shard.name} "
+                    f"(ok={ok}, err={err}). Stopping without marking shard done.",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                return 3
 
             mark_shard_done(shard.name)
 

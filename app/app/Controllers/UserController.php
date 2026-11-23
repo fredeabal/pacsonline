@@ -9,7 +9,7 @@ use CodeIgniter\HTTP\RedirectResponse;
 use CodeIgniter\Shield\Entities\User;
 
 /////////////////////////////////////////////////////////////////////////////////
-// Administración de usuarios, roles (admin, médico, paciente) y estado.       //
+// Administración de usuarios, roles (supervisor, médico, usuario, observador).//
 /////////////////////////////////////////////////////////////////////////////////
 class UserController extends BaseController
 {
@@ -76,7 +76,7 @@ class UserController extends BaseController
             ],
             'role' => [
                 'label' => 'Rol',
-                'rules' => 'required|in_list[admin,medico,paciente]',
+                'rules' => 'required|in_list[admin,medico,usuario,observador]',
             ],
             'specialty' => [
                 'label' => 'Especialidad',
@@ -175,7 +175,7 @@ class UserController extends BaseController
             ],
             'role' => [
                 'label' => 'Rol',
-                'rules' => 'required|in_list[admin,medico,paciente]',
+                'rules' => 'required|in_list[admin,medico,usuario,observador]',
             ],
             'specialty' => [
                 'label' => 'Especialidad',

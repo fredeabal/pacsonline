@@ -22,7 +22,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="description" content="PACS Online — Gestión de estudios DICOM, compartición segura y segunda opinión médica." />
 
-  <link rel="shortcut icon" type="image/png" href="<?= base_url('assets/images/logos/favicon.png') ?>" />
+  <link rel="icon" type="image/svg+xml" href="<?= base_url('assets/images/logos/favicon.svg') ?>" />
+  <link rel="alternate icon" type="image/png" href="<?= base_url('assets/images/logos/favicon.png') ?>" />
+  <link rel="apple-touch-icon" href="<?= base_url('assets/images/logos/favicon.png') ?>" />
   <link rel="stylesheet" href="<?= base_url('assets/css/styles.css') ?>?v=<?= filemtime(FCPATH . 'assets/css/styles.css') ?>" />
   <link rel="stylesheet" href="<?= base_url('assets/css/custom.css') ?>?v=<?= filemtime(FCPATH . 'assets/css/custom.css') ?>" />
   <link rel="stylesheet" href="<?= base_url('assets/libs/sweetalert2/dist/sweetalert2.min.css') ?>" />
@@ -47,9 +49,9 @@
           </ul>
 
           <div class="d-block d-lg-none py-3">
-            <a href="<?= base_url() ?>" class="text-nowrap fw-bolder fs-5 text-decoration-none d-flex align-items-center gap-2">
-              <span class="d-inline-flex align-items-center justify-content-center bg-primary text-white p-2 rounded-2"><i class="ti ti-scan fs-5"></i></span>
-              <span>PACS Online</span>
+            <a href="<?= base_url() ?>" class="text-nowrap logo-img text-decoration-none d-flex align-items-center">
+              <img src="<?= base_url('assets/images/logos/pacs_line_logo_light.svg') ?>?v=<?= filemtime(FCPATH . 'assets/images/logos/pacs_line_logo_light.svg') ?>" class="light-logo" alt="PACS Online" style="height: 32px; width: auto;" />
+              <img src="<?= base_url('assets/images/logos/pacs_line_logo_dark.svg') ?>?v=<?= filemtime(FCPATH . 'assets/images/logos/pacs_line_logo_dark.svg') ?>" class="dark-logo" alt="PACS Online" style="height: 32px; width: auto;" />
             </a>
           </div>
 

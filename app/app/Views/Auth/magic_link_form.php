@@ -14,7 +14,9 @@
   <title>PACS Online | Recuperar Acceso</title>
   <meta name="theme-color" content="#5d87ff" />
 
-  <link rel="shortcut icon" type="image/png" href="<?= base_url('assets/images/logos/favicon.png') ?>" />
+  <link rel="icon" type="image/svg+xml" href="<?= base_url('assets/images/logos/favicon.svg') ?>" />
+  <link rel="alternate icon" type="image/png" href="<?= base_url('assets/images/logos/favicon.png') ?>" />
+  <link rel="apple-touch-icon" href="<?= base_url('assets/images/logos/favicon.png') ?>" />
   <link rel="stylesheet" href="<?= base_url('assets/css/styles.css') ?>?v=<?= filemtime(FCPATH . 'assets/css/styles.css') ?>" />
   <link rel="stylesheet" href="<?= base_url('assets/css/custom.css') ?>?v=<?= filemtime(FCPATH . 'assets/css/custom.css') ?>" />
   <link rel="stylesheet" href="<?= base_url('assets/libs/sweetalert2/dist/sweetalert2.min.css') ?>" />
@@ -40,11 +42,9 @@
 
           <div class="col-12 col-xl-5 col-xxl-4 bg-body d-flex justify-content-center align-items-center p-4 min-vh-100">
             <div class="auth-max-width w-100 col-sm-8 col-md-6 col-xl-9 px-4">
-              <a href="<?= base_url() ?>" class="text-nowrap logo-img d-flex align-items-center justify-content-center gap-2 mb-5 text-decoration-none">
-                <span class="d-inline-flex align-items-center justify-content-center rounded-3 bg-primary text-white" style="width: 44px; height: 44px;">
-                  <i class="ti ti-scan fs-7"></i>
-                </span>
-                <span class="fw-bolder fs-7 text-body">PACS <span class="text-primary">Online</span></span>
+              <a href="<?= base_url() ?>" class="text-nowrap logo-img d-flex align-items-center justify-content-center mb-5 text-decoration-none">
+                <img src="<?= base_url('assets/images/logos/pacs_line_logo_light.svg') ?>?v=<?= filemtime(FCPATH . 'assets/images/logos/pacs_line_logo_light.svg') ?>" class="light-logo login-logo" alt="PACS Online" />
+                <img src="<?= base_url('assets/images/logos/pacs_line_logo_dark.svg') ?>?v=<?= filemtime(FCPATH . 'assets/images/logos/pacs_line_logo_dark.svg') ?>" class="dark-logo login-logo" alt="PACS Online" />
               </a>
 
               <h3 class="mb-1 fw-bolder">Recuperar Acceso</h3>

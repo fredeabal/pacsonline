@@ -1,11 +1,9 @@
     <aside class="left-sidebar with-vertical">
       <div>
         <div class="brand-logo d-flex align-items-center justify-content-between">
-          <a href="<?= base_url() ?>" class="text-nowrap logo-img text-decoration-none d-flex align-items-center gap-2">
-            <span class="d-inline-flex align-items-center justify-content-center rounded-2 bg-primary text-white" style="width: 34px; height: 34px;">
-              <i class="ti ti-scan fs-6"></i>
-            </span>
-            <span class="fw-bolder fs-5 text-body">PACS <span class="text-primary">Online</span></span>
+          <a href="<?= base_url() ?>" class="text-nowrap logo-img text-decoration-none">
+            <img src="<?= base_url('assets/images/logos/pacs_line_logo_light.svg') ?>?v=<?= filemtime(FCPATH . 'assets/images/logos/pacs_line_logo_light.svg') ?>" class="light-logo" alt="PACS Online" />
+            <img src="<?= base_url('assets/images/logos/pacs_line_logo_dark.svg') ?>?v=<?= filemtime(FCPATH . 'assets/images/logos/pacs_line_logo_dark.svg') ?>" class="dark-logo" alt="PACS Online" />
           </a>
           <button type="button" class="sidebartoggler ms-auto btn border-0 bg-transparent text-body fs-5 d-block d-xl-none p-1 shadow-none" aria-label="Cerrar menú lateral">
             <i class="ti ti-x"></i>
@@ -13,10 +11,11 @@
         </div>
 
         <?php
-          $user     = auth()->user();
-          $isAdmin  = $user?->can('users.manage') ?? false;
-          $isMedico = ($user?->can('reports.review') ?? false) && ! $isAdmin;
-          $isPatient = ! $isAdmin && ! $isMedico;
+          $user         = auth()->user();
+          $isSupervisor = $user?->can('users.manage') ?? false;
+          $canReview    = $user?->can('reports.review') ?? false;
+          $canUpload    = $user?->can('studies.upload') ?? false;
+          $isMedicoOnly = $canReview && ! $isSupervisor;
         ?>
 
         <nav class="sidebar-nav scroll-sidebar" data-simplebar>
@@ -32,16 +31,25 @@
               </a>
             </li>
 
-            <?php if ($isPatient): ?>
+            <?php if (! $isMedicoOnly): ?>
               <li class="sidebar-item">
                 <a class="sidebar-link" href="<?= base_url('studies') ?>" aria-expanded="false">
                   <span><i class="ti ti-report-medical"></i></span>
-                  <span class="hide-menu">Mis Estudios</span>
+                  <span class="hide-menu">Estudios DICOM</span>
                 </a>
               </li>
             <?php endif; ?>
 
-            <?php if ($isMedico): ?>
+            <?php if ($canUpload): ?>
+              <li class="sidebar-item">
+                <a class="sidebar-link" href="<?= base_url('studies/upload') ?>" aria-expanded="false">
+                  <span><i class="ti ti-cloud-upload"></i></span>
+                  <span class="hide-menu">Subir Estudio</span>
+                </a>
+              </li>
+            <?php endif; ?>
+
+            <?php if ($canReview): ?>
               <li class="sidebar-item">
                 <a class="sidebar-link" href="<?= base_url('reports') ?>" aria-expanded="false">
                   <span><i class="ti ti-stethoscope"></i></span>
@@ -56,20 +64,7 @@
               </li>
             <?php endif; ?>
 
-            <?php if ($isAdmin): ?>
-              <li class="sidebar-item">
-                <a class="sidebar-link" href="<?= base_url('studies') ?>" aria-expanded="false">
-                  <span><i class="ti ti-report-medical"></i></span>
-                  <span class="hide-menu">Estudios DICOM</span>
-                </a>
-              </li>
-              <li class="sidebar-item">
-                <a class="sidebar-link" href="<?= base_url('studies/upload') ?>" aria-expanded="false">
-                  <span><i class="ti ti-cloud-upload"></i></span>
-                  <span class="hide-menu">Subir Estudio</span>
-                </a>
-              </li>
-
+            <?php if ($isSupervisor): ?>
               <li class="nav-small-cap mt-4">
                 <i class="ti ti-dots nav-small-cap-icon fs-4"></i>
                 <span class="hide-menu">Administración</span>

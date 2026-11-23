@@ -77,7 +77,10 @@
       </div>
       <div class="col-12">
         <div class="input-group">
-          <span class="input-group-text"><i class="ti ti-search"></i></span>
+          <span class="input-group-text" id="reportsSearchIconWrap">
+            <i class="ti ti-search" id="reportsSearchIcon"></i>
+            <span class="spinner-border spinner-border-sm text-primary d-none" id="reportsSearchSpinner" role="status" aria-label="Buscando..."></span>
+          </span>
           <input type="text" id="reportsSearchInput" name="q" value="<?= esc($search ?? '') ?>" class="form-control" placeholder="Buscar por paciente o ID..." autocomplete="off">
           <a href="<?= base_url('reports') ?>" id="reportsSearchClear" class="input-group-text text-muted text-decoration-none <?= (empty($search) && ($datePreset ?? 'all') === 'all') ? 'd-none' : '' ?>" title="Limpiar búsqueda"><i class="ti ti-x"></i></a>
         </div>
@@ -296,11 +299,19 @@
     var dateFromInput = document.getElementById('reportsDateFrom');
     var dateToInput = document.getElementById('reportsDateTo');
     var clearBtn = document.getElementById('reportsSearchClear');
+    var searchIcon = document.getElementById('reportsSearchIcon');
+    var searchSpinner = document.getElementById('reportsSearchSpinner');
     var results = document.getElementById('reportsResults');
     if (!form || !results) return;
 
     var timer = null;
     var controller = null;
+
+    function setSearching(active) {
+      if (searchIcon) searchIcon.classList.toggle('d-none', active);
+      if (searchSpinner) searchSpinner.classList.toggle('d-none', !active);
+      results.style.opacity = active ? '0.6' : '1';
+    }
 
     function runFilter() {
       var params = new URLSearchParams(new FormData(form));
@@ -317,18 +328,19 @@
       var url = form.action + (qs ? '?' + qs : '');
       if (controller) controller.abort();
       controller = new AbortController();
-      results.style.opacity = '0.6';
+      var currentController = controller;
+      setSearching(true);
       fetch(url, { signal: controller.signal, headers: { 'X-Requested-With': 'XMLHttpRequest' } })
         .then(function(r) { return r.text(); })
         .then(function(html) {
           var doc = new DOMParser().parseFromString(html, 'text/html');
           var next = doc.getElementById('reportsResults');
           if (next) results.innerHTML = next.innerHTML;
-          results.style.opacity = '1';
+          if (controller === currentController) setSearching(false);
           history.replaceState(null, '', url);
         })
         .catch(function(err) {
-          if (err.name !== 'AbortError') results.style.opacity = '1';
+          if (err.name !== 'AbortError' && controller === currentController) setSearching(false);
         });
     }
 

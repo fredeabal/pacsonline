@@ -127,7 +127,8 @@ class NotificationService
         string $studyUid
     ): bool {
         $settings = service('settings');
-        if (! (bool) $settings->get('Smtp.enabled') || trim($toEmail) === '') {
+        $host     = trim((string) ($settings->get('Smtp.host') ?? ''));
+        if ($host === '' || trim($toEmail) === '') {
             return false;
         }
 

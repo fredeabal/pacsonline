@@ -30,7 +30,7 @@ class PatientAccessController extends BaseController
             return redirect()->to('/studies')->with('error', 'Sin permiso para gestionar accesos de pacientes.');
         }
 
-        $study = model(StudyModel::class)->findByStudyUid($studyUid);
+        $study = $this->resolveStudyInfo($studyUid);
         $links = model(PatientAccessLinkModel::class)
             ->where('study_instance_uid', $studyUid)
             ->orderBy('created_at', 'DESC')
@@ -58,14 +58,12 @@ class PatientAccessController extends BaseController
             return redirect()->to('/studies')->with('error', 'Sin permiso para generar accesos de pacientes.');
         }
 
-        $study      = model(StudyModel::class)->findByStudyUid($studyUid);
-        $orthanc    = new OrthancClient();
-        $orthancRef = $orthanc->findStudyByUid($studyUid);
+        $study      = $this->resolveStudyInfo($studyUid);
+        $orthancRef = $study['_orthanc'] ?? null;
         $pTags      = is_array($orthancRef['PatientMainDicomTags'] ?? null) ? $orthancRef['PatientMainDicomTags'] : [];
 
         $dicomPatientId = trim((string) ($pTags['PatientID'] ?? ''));
         $dicomBirthDate = PatientAccessLinkModel::normalizeBirthDate((string) ($pTags['PatientBirthDate'] ?? '')) ?? '';
-        $smtpEnabled    = (bool) service('settings')->get('Smtp.enabled');
 
         return view('patient_access/create', [
             'title'          => 'Nuevo Acceso Paciente | PACS Online',
@@ -73,7 +71,6 @@ class PatientAccessController extends BaseController
             'study'          => $study,
             'dicomPatientId' => $dicomPatientId,
             'dicomBirthDate' => $dicomBirthDate,
-            'smtpEnabled'    => $smtpEnabled,
         ]);
     }
 
@@ -92,7 +89,7 @@ class PatientAccessController extends BaseController
                 'rules' => 'required|max_length[128]',
             ],
             'patient_id' => [
-                'label' => 'Número de documento',
+                'label' => 'Número de identificación',
                 'rules' => 'required|max_length[64]',
             ],
             'patient_birth_date' => [
@@ -119,7 +116,7 @@ class PatientAccessController extends BaseController
         $normBirth  = PatientAccessLinkModel::normalizeBirthDate((string) $data['patient_birth_date']);
 
         if (strlen($normId) < 3) {
-            return redirect()->back()->withInput()->with('error', 'El número de documento debe tener al menos 3 caracteres alfanuméricos.');
+            return redirect()->back()->withInput()->with('error', 'El número de identificación debe tener al menos 3 caracteres alfanuméricos.');
         }
 
         if ($normBirth === null) {
@@ -153,7 +150,7 @@ class PatientAccessController extends BaseController
 
         $message = 'Enlace de acceso para el paciente generado.';
         if ($patientEmail !== '') {
-            $study       = model(StudyModel::class)->findByStudyUid($studyUid);
+            $study       = $this->resolveStudyInfo($studyUid);
             $patientName = format_patient_name($study['patient_name'] ?? null, 'Paciente');
             $studyDesc   = format_study_description($study['study_description'] ?? null, 'Estudio DICOM');
             $magicUrl    = base_url('paciente/' . $token);
@@ -177,12 +174,160 @@ class PatientAccessController extends BaseController
     }
 
     /////////////////////////////////////////////////////////////////////////////
+    // Muestra el formulario para editar un enlace de paciente existente.      //
+    /////////////////////////////////////////////////////////////////////////////
+    public function editForm(int $linkId): string|RedirectResponse
+    {
+        if (! $this->canManagePatientAccess()) {
+            return redirect()->to('/studies')->with('error', 'Sin permiso para editar accesos de pacientes.');
+        }
+
+        $link = model(PatientAccessLinkModel::class)->find($linkId);
+        if ($link === null) {
+            return redirect()->to('/studies')->with('error', 'Enlace no encontrado.');
+        }
+
+        if (! empty($link['revoked_at'])) {
+            return redirect()->to('/studies/patient-access/' . urlencode((string) $link['study_instance_uid']))
+                ->with('error', 'No se puede editar un enlace revocado.');
+        }
+
+        $studyUid = (string) $link['study_instance_uid'];
+        $study    = $this->resolveStudyInfo($studyUid);
+
+        return view('patient_access/edit', [
+            'title'    => 'Editar Acceso Paciente | PACS Online',
+            'studyUid' => $studyUid,
+            'study'    => $study,
+            'link'     => $link,
+        ]);
+    }
+
+    /////////////////////////////////////////////////////////////////////////////
+    // Actualiza caducidad, email, descarga ZIP y datos opcionales del enlace. //
+    /////////////////////////////////////////////////////////////////////////////
+    public function update(int $linkId): RedirectResponse
+    {
+        if (! $this->canManagePatientAccess()) {
+            return redirect()->to('/studies')->with('error', 'Sin permiso para editar accesos de pacientes.');
+        }
+
+        $model = model(PatientAccessLinkModel::class);
+        $link  = $model->find($linkId);
+        if ($link === null) {
+            return redirect()->to('/studies')->with('error', 'Enlace no encontrado.');
+        }
+
+        if (! empty($link['revoked_at'])) {
+            return redirect()->to('/studies/patient-access/' . urlencode((string) $link['study_instance_uid']))
+                ->with('error', 'No se puede editar un enlace revocado.');
+        }
+
+        $rules = [
+            'expires_date' => [
+                'label' => 'Fecha de caducidad',
+                'rules' => 'required|regex_match[/^(?:\d{2}\/\d{2}\/\d{4}|\d{4}-\d{2}-\d{2})$/]',
+            ],
+            'patient_email' => [
+                'label' => 'Correo electrónico del paciente',
+                'rules' => 'permit_empty|valid_email|max_length[190]',
+            ],
+        ];
+
+        if (! $this->validateData($this->request->getPost(), $rules)) {
+            return redirect()->back()->withInput()->with('errors', $this->validator->getErrors());
+        }
+
+        $data        = $this->validator->getValidated();
+        $expiresIso  = normalize_date_filter((string) $data['expires_date']);
+        if ($expiresIso === '') {
+            return redirect()->back()->withInput()->with('error', 'La fecha de caducidad no tiene un formato válido.');
+        }
+        [$ey, $em, $ed] = array_map('intval', explode('-', $expiresIso));
+        if (! checkdate($em, $ed, $ey)) {
+            return redirect()->back()->withInput()->with('error', 'La fecha de caducidad no es válida.');
+        }
+
+        $patientEmail = trim((string) ($data['patient_email'] ?? ''));
+        $update       = [
+            'expires_at'     => $expiresIso . ' 23:59:59',
+            'patient_email'  => $patientEmail !== '' ? $patientEmail : null,
+            'allow_download' => $this->request->getPost('allow_download') ? 1 : 0,
+        ];
+
+        if (! empty($link['locked_at']) && $this->request->getPost('unlock_link')) {
+            $update['locked_at']       = null;
+            $update['failed_attempts'] = 0;
+        }
+
+        $model->update($linkId, $update);
+
+        AuditLogModel::record(
+            'patient_access.updated',
+            (string) $link['study_instance_uid'],
+            $linkId,
+            'Enlace de paciente actualizado (caduca: ' . $update['expires_at'] . ')',
+            $this->request
+        );
+
+        return redirect()->to('/studies/patient-access/' . urlencode((string) $link['study_instance_uid']))
+            ->with('message', 'Enlace de paciente actualizado.');
+    }
+
+    /////////////////////////////////////////////////////////////////////////////
+    // Envía o reenvía el Magic Link por correo electrónico al paciente.       //
+    /////////////////////////////////////////////////////////////////////////////
+    public function resendEmail(int $linkId): RedirectResponse
+    {
+        if (! $this->canManagePatientAccess()) {
+            return redirect()->to('/studies')->with('error', 'Sin permiso para enviar correos.');
+        }
+
+        $model = model(PatientAccessLinkModel::class);
+        $link  = $model->find($linkId);
+
+        if ($link === null || ! $model->isStillActive($linkId)) {
+            return redirect()->back()->with('error', 'El enlace no existe o ya no está activo.');
+        }
+
+        $email = trim((string) ($this->request->getPost('patient_email') ?? $link['patient_email'] ?? ''));
+        if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return redirect()->back()->with('error', 'Introduce un correo electrónico válido.');
+        }
+
+        if ($email !== ($link['patient_email'] ?? '')) {
+            $model->update($linkId, ['patient_email' => $email]);
+        }
+
+        $studyUid    = (string) $link['study_instance_uid'];
+        $study       = $this->resolveStudyInfo($studyUid);
+        $patientName = format_patient_name($study['patient_name'] ?? null, 'Paciente');
+        $studyDesc   = format_study_description($study['study_description'] ?? null, 'Estudio DICOM');
+        $magicUrl    = base_url('paciente/' . $link['token']);
+
+        $sent = (new NotificationService())->sendPatientMagicLinkEmail(
+            $email,
+            $patientName,
+            $studyDesc,
+            $magicUrl,
+            (string) $link['expires_at'],
+            $studyUid
+        );
+
+        if ($sent) {
+            return redirect()->back()->with('message', 'Correo enviado correctamente a ' . $email . '.');
+        }
+
+        return redirect()->back()->with('error', 'No se pudo enviar el correo. Verifica la configuración SMTP en Ajustes.');
+    }
+
+    /////////////////////////////////////////////////////////////////////////////
     // Revoca manualmente un enlace de acceso de paciente antes de caducar.    //
     /////////////////////////////////////////////////////////////////////////////
     public function revoke(int $linkId): RedirectResponse
     {
-        if (! $this->canManagePatientAccess()) {
-            return redirect()->to('/studies')->with('error', 'Sin permiso para revocar accesos.');
+        if (! auth()->user()?->can('studies.delete')) {
+            return redirect()->to('/studies')->with('error', 'Solo un supervisor puede revocar accesos.');
         }
 
         $model = model(PatientAccessLinkModel::class);
@@ -202,6 +347,38 @@ class PatientAccessController extends BaseController
         );
 
         return redirect()->back()->with('message', 'Acceso del paciente revocado.');
+    }
+
+    /////////////////////////////////////////////////////////////////////////////
+    // Elimina un enlace de paciente revocado (solo supervisores).             //
+    /////////////////////////////////////////////////////////////////////////////
+    public function delete(int $linkId): RedirectResponse
+    {
+        if (! auth()->user()?->can('studies.delete')) {
+            return redirect()->to('/studies')->with('error', 'Solo los supervisores pueden eliminar enlaces.');
+        }
+
+        $model = model(PatientAccessLinkModel::class);
+        $link  = $model->find($linkId);
+
+        if ($link === null) {
+            return redirect()->back()->with('error', 'Enlace no encontrado.');
+        }
+
+        if (empty($link['revoked_at'])) {
+            return redirect()->back()->with('error', 'Solo se pueden eliminar enlaces revocados.');
+        }
+
+        $model->delete($linkId);
+        AuditLogModel::record(
+            'patient_access.deleted',
+            (string) $link['study_instance_uid'],
+            $linkId,
+            'Enlace de paciente revocado eliminado por administrador',
+            $this->request
+        );
+
+        return redirect()->back()->with('message', 'Enlace eliminado.');
     }
 
     /////////////////////////////////////////////////////////////////////////////
@@ -245,9 +422,9 @@ class PatientAccessController extends BaseController
             $this->request
         );
 
-        $studyUid = (string) $link['study_instance_uid'];
-        $study    = model(StudyModel::class)->findByStudyUid($studyUid);
-        $report   = model(MedicalReportModel::class)->findByStudyUid($studyUid);
+        $studyUid  = (string) $link['study_instance_uid'];
+        $study     = $this->resolveStudyInfo($studyUid);
+        $report    = model(MedicalReportModel::class)->findByStudyUid($studyUid);
         $hasReport = $report !== null && ($report['status'] ?? '') === 'reported';
 
         return view('patient_access/view', [
@@ -459,7 +636,7 @@ class PatientAccessController extends BaseController
     private function canManagePatientAccess(): bool
     {
         $user = auth()->user();
-        return $user !== null && $user->can('studies.view_all');
+        return $user !== null && $user->can('studies.share');
     }
 
     /**
@@ -491,5 +668,30 @@ class PatientAccessController extends BaseController
             ->setHeader('Pragma', 'no-cache')
             ->setHeader('Referrer-Policy', 'no-referrer')
             ->setHeader('X-Robots-Tag', 'noindex, nofollow');
+    }
+
+    /**
+     * Obtiene los metadatos del estudio combinando la tabla local y Orthanc como respaldo.
+     *
+     * @return array<string, mixed>
+     */
+    private function resolveStudyInfo(string $studyUid): array
+    {
+        $study = model(StudyModel::class)->findByStudyUid($studyUid) ?? [];
+
+        $orthancStudy = (new OrthancClient())->findStudyByUid($studyUid);
+        if (is_array($orthancStudy)) {
+            $tags    = is_array($orthancStudy['MainDicomTags'] ?? null) ? $orthancStudy['MainDicomTags'] : [];
+            $patient = is_array($orthancStudy['PatientMainDicomTags'] ?? null) ? $orthancStudy['PatientMainDicomTags'] : [];
+
+            $study['orthanc_id']        = ! empty($study['orthanc_id']) ? $study['orthanc_id'] : ($orthancStudy['ID'] ?? null);
+            $study['patient_name']      = ! empty($study['patient_name']) ? $study['patient_name'] : ($patient['PatientName'] ?? null);
+            $study['patient_id']        = $patient['PatientID'] ?? ($study['patient_id'] ?? null);
+            $study['study_description'] = ! empty($study['study_description']) ? $study['study_description'] : ($tags['StudyDescription'] ?? null);
+            $study['study_date']        = ! empty($study['study_date']) ? $study['study_date'] : ($tags['StudyDate'] ?? null);
+            $study['_orthanc']          = $orthancStudy;
+        }
+
+        return $study;
     }
 }

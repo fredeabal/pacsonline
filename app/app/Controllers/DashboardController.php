@@ -10,97 +10,30 @@ use App\Models\PatientAccessLinkModel;
 use App\Models\StudyModel;
 
 /////////////////////////////////////////////////////////////////////////////////
-// Panel principal (Dashboard) adaptado según el rol: Admin, Médico o Paciente.//
+// Panel principal (Dashboard) adaptado según el rol del usuario.              //
 /////////////////////////////////////////////////////////////////////////////////
 class DashboardController extends BaseController
 {
     /////////////////////////////////////////////////////////////////////////////
-    // Renderiza el dashboard con métricas globales de Orthanc o propios.      //
+    // Renderiza el dashboard con métricas globales de Orthanc según el rol.   //
     /////////////////////////////////////////////////////////////////////////////
     public function index(): string
     {
-        $user       = auth()->user();
-        $isAdmin    = $user?->can('users.manage') ?? false;
-        $isMedico   = ($user?->can('reports.review') ?? false) && ! $isAdmin;
-        $userId     = (int) auth()->id();
+        $user         = auth()->user();
+        $isSupervisor = $user?->can('users.manage') ?? false;
+        $isMedico     = ($user?->can('reports.review') ?? false) && ! $isSupervisor;
+        $isUsuario    = ! $isSupervisor && ! $isMedico && ($user?->can('studies.share') ?? false);
+        $roleMode     = $isSupervisor ? 'admin' : ($isMedico ? 'medico' : ($isUsuario ? 'usuario' : 'observador'));
 
-        $orthanc     = new OrthancClient();
-        $alive       = $orthanc->isAlive();
+        $orthanc          = new OrthancClient();
+        $alive            = $orthanc->isAlive();
         $studyModel       = model(StudyModel::class);
         $reportModel      = model(MedicalReportModel::class);
         $patientLinkModel = model(PatientAccessLinkModel::class);
 
-        if (! $isAdmin && ! $isMedico) {
-            $ownedRecords = $studyModel
-                ->where('owner_user_id', $userId)
-                ->orderBy('study_date', 'DESC')
-                ->orderBy('id', 'DESC')
-                ->findAll();
-
-            $ownedUids    = array_values(array_filter(array_column($ownedRecords, 'study_instance_uid')));
-            $reportsByUid = $reportModel->mapByStudyUids($ownedUids);
-
-            $reportedCount = 0;
-            $pendingCount  = 0;
-            $urgentCount   = 0;
-
-            foreach ($ownedRecords as $rec) {
-                $uid    = (string) ($rec['study_instance_uid'] ?? '');
-                $report = $reportsByUid[$uid] ?? null;
-                $status = $report['status'] ?? 'pending';
-                if ($status === 'reported') {
-                    $reportedCount++;
-                } else {
-                    $pendingCount++;
-                    if (($rec['priority'] ?? 'normal') === 'urgent') {
-                        $urgentCount++;
-                    }
-                }
-            }
-
-            $recentStudies = [];
-            foreach (array_slice($ownedRecords, 0, 5) as $rec) {
-                $uid    = (string) ($rec['study_instance_uid'] ?? '');
-                $study  = ($alive && $uid !== '') ? ($orthanc->findStudyByUid($uid) ?? []) : [];
-                $report = $reportsByUid[$uid] ?? null;
-                $status = $report['status'] ?? 'pending';
-
-                if (! isset($study['MainDicomTags'])) {
-                    $study['MainDicomTags'] = [
-                        'StudyInstanceUID' => $uid,
-                        'StudyDescription' => $rec['study_description'] ?? '',
-                        'StudyDate'        => $rec['study_date'] ?? '',
-                    ];
-                }
-                if (! isset($study['PatientMainDicomTags'])) {
-                    $study['PatientMainDicomTags'] = [
-                        'PatientName' => $rec['patient_name'] ?? 'Anónimo',
-                    ];
-                }
-
-                $study                   = merge_local_study_metadata($study, $rec);
-                $study['_record']        = $rec;
-                $study['_report']        = $report;
-                $study['_report_status'] = $status;
-                $study['_priority']      = $rec['priority'] ?? 'normal';
-                $recentStudies[]         = $study;
-            }
-
-            return view('dashboard/index', [
-                'title'         => 'Dashboard | PACS Online',
-                'roleMode'      => 'paciente',
-                'orthancAlive'  => $alive,
-                'totalStudies'  => count($ownedRecords),
-                'pendingCount'  => $pendingCount,
-                'urgentCount'   => $urgentCount,
-                'reportedCount' => $reportedCount,
-                'recentStudies' => $recentStudies,
-            ]);
-        }
-
-        $stats = $isAdmin && $alive ? $orthanc->getStatistics() : [];
+        $stats     = $isSupervisor && $alive ? $orthanc->getStatistics() : [];
         $diskStats = null;
-        if ($isAdmin) {
+        if ($isSupervisor) {
             $storagePath = '/var/www/orthanc-storage';
             if (is_dir($storagePath)) {
                 $totalBytes = @disk_total_space($storagePath);
@@ -155,13 +88,13 @@ class DashboardController extends BaseController
             $study['_report']               = $report;
             $study['_active_patient_links'] = $patientLinksByUid[$uid] ?? 0;
             $study['_report_status']        = $status;
-            $study['_priority']      = $record['priority'] ?? 'normal';
-            $recentStudies[]         = $study;
+            $study['_priority']             = $record['priority'] ?? 'normal';
+            $recentStudies[]                = $study;
         }
 
         return view('dashboard/index', [
             'title'         => 'Dashboard | PACS Online',
-            'roleMode'      => $isAdmin ? 'admin' : 'medico',
+            'roleMode'      => $roleMode,
             'orthancAlive'  => $alive,
             'orthancStats'  => $stats,
             'diskStats'     => $diskStats,

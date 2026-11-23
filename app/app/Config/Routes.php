@@ -59,9 +59,13 @@ $routes->group('', ['filter' => 'session'], static function ($routes) {
 
     // Acceso para pacientes (Magic Link + Documento + Fecha de nacimiento)
     $routes->get('studies/patient-access/(:segment)/create', [PatientAccessController::class, 'createForm']);
+    $routes->get('studies/patient-access/(:num)/edit', [PatientAccessController::class, 'editForm']);
+    $routes->post('studies/patient-access/(:num)/update', [PatientAccessController::class, 'update']);
     $routes->get('studies/patient-access/(:segment)', [PatientAccessController::class, 'manage']);
     $routes->post('studies/patient-access', [PatientAccessController::class, 'create']);
+    $routes->post('studies/patient-access/(:num)/resend-email', [PatientAccessController::class, 'resendEmail']);
     $routes->post('studies/patient-access/(:num)/revoke', [PatientAccessController::class, 'revoke']);
+    $routes->post('studies/patient-access/(:num)/delete', [PatientAccessController::class, 'delete']);
 
     // Informes médicos (Worklist + Editor + PDF)
     $routes->get('reports', [ReportController::class, 'index']);

@@ -38,10 +38,7 @@ class StudyController extends BaseController
 
         $user       = auth()->user();
         $canViewAll = $user?->can('studies.view_all') ?? false;
-        $canManage  = $user?->can('users.manage') ?? false;
         $userId     = auth()->id();
-
-        $patients = $canManage ? $this->usersByGroup('paciente') : [];
 
         $perPage  = 25;
         $page     = max(1, (int) ($this->request->getGet('page') ?? 1));
@@ -121,7 +118,6 @@ class StudyController extends BaseController
         return view('studies/index', [
             'title'        => 'Estudios DICOM | PACS Online',
             'studies'      => $studies,
-            'patients'     => $patients,
             'page'         => $page,
             'perPage'      => $perPage,
             'hasNext'      => $hasNext,
@@ -142,16 +138,13 @@ class StudyController extends BaseController
             return redirect()->to('/studies')->with('error', 'Sin permiso para subir estudios.');
         }
 
-        $patients = $this->usersByGroup('paciente');
-        $doctors  = $this->usersByGroup('medico');
-
+        $doctors = $this->usersByGroups(['medico', 'admin']);
         $centers = model(MedicalCenterModel::class)->where('active', 1)->orderBy('name', 'ASC')->findAll();
 
         return view('studies/upload', [
-            'title'    => 'Subir Estudio | PACS Online',
-            'patients' => $patients,
-            'doctors'  => $doctors,
-            'centers'  => $centers,
+            'title'   => 'Subir Estudio | PACS Online',
+            'doctors' => $doctors,
+            'centers' => $centers,
         ]);
     }
 
@@ -169,10 +162,6 @@ class StudyController extends BaseController
                 'label' => 'Archivo DICOM o ZIP',
                 'rules' => 'uploaded[dicom_file]|ext_in[dicom_file,dcm,dicom,zip]|max_size[dicom_file,524288]',
             ],
-            'patient_user_id' => [
-                'label' => 'Paciente',
-                'rules' => 'permit_empty|integer',
-            ],
             'center_id' => [
                 'label' => 'Centro',
                 'rules' => 'permit_empty|integer',
@@ -185,14 +174,6 @@ class StudyController extends BaseController
                 'label' => 'Prioridad',
                 'rules' => 'permit_empty|in_list[normal,urgent]',
             ],
-            'new_patient_name' => [
-                'label' => 'Nombre del paciente',
-                'rules' => 'permit_empty|max_length[150]',
-            ],
-            'new_patient_email' => [
-                'label' => 'Correo del paciente',
-                'rules' => 'permit_empty|valid_email|is_unique[auth_identities.secret]',
-            ],
         ];
 
         if (! $this->validateData($this->request->getPost(), $rules)) {
@@ -204,41 +185,14 @@ class StudyController extends BaseController
             return redirect()->back()->with('error', 'Archivo no válido.');
         }
 
-        $post            = $this->validator->getValidated();
-        $patientUserId   = ! empty($post['patient_user_id']) ? (int) $post['patient_user_id'] : null;
-        $centerId        = ! empty($post['center_id']) ? (int) $post['center_id'] : null;
-        $doctorId        = ! empty($post['assigned_doctor_id']) ? (int) $post['assigned_doctor_id'] : null;
-        $priority        = $post['priority'] ?: 'normal';
-        $createdNote     = '';
-
-        if (! empty($post['new_patient_email'])) {
-            $tempPass  = bin2hex(random_bytes(8));
-            $baseUser  = preg_replace('/[^a-z0-9_]/', '', strtolower(explode('@', $post['new_patient_email'])[0])) ?: 'paciente';
-            $username  = $baseUser . '_' . random_int(100, 999);
-            $usersProv = auth()->getProvider();
-
-            $newUser = new User([
-                'username'  => $username,
-                'full_name' => $post['new_patient_name'] ?: $username,
-                'email'     => $post['new_patient_email'],
-                'password'  => $tempPass,
-            ]);
-            $usersProv->save($newUser);
-            $savedPatient = $usersProv->findById($usersProv->getInsertID());
-            if ($savedPatient !== null) {
-                $savedPatient->activate();
-                $savedPatient->addGroup('paciente');
-                $patientUserId = (int) $savedPatient->id;
-
-                $emailSent   = (new NotificationService())->sendPatientWelcomeEmail($savedPatient, $tempPass);
-                $createdNote = $emailSent
-                    ? ' Paciente creado y credenciales enviadas.'
-                    : ' Paciente creado (SMTP no activo; asigna clave en Usuarios).';
-            }
-        }
+        $post        = $this->validator->getValidated();
+        $centerId    = ! empty($post['center_id']) ? (int) $post['center_id'] : null;
+        $doctorId    = ! empty($post['assigned_doctor_id']) ? (int) $post['assigned_doctor_id'] : null;
+        $priority    = $post['priority'] ?: 'normal';
+        $createdNote = '';
 
         $meta = [
-            'owner_user_id'      => $patientUserId,
+            'owner_user_id'      => null,
             'center_id'          => $centerId,
             'assigned_doctor_id' => $doctorId,
             'priority'           => $priority,
@@ -455,8 +409,9 @@ class StudyController extends BaseController
             (string) ($orthancStudyInfo['PatientMainDicomTags']['PatientBirthDate'] ?? '')
         );
 
-        $patients = $user->can('users.manage') ? $this->usersByGroup('paciente') : [];
-        $doctors  = $user->can('users.manage') ? $this->usersByGroup('medico') : [];
+        $canAssign = $user->can('studies.assign');
+        $canSend   = $user->can('studies.send');
+        $doctors   = $canAssign ? $this->usersByGroups(['medico', 'admin']) : [];
 
         $attachments  = model(StudyAttachmentModel::class)->forStudy($studyUid);
         $report       = model(MedicalReportModel::class)->findByStudyUid($studyUid);
@@ -484,25 +439,24 @@ class StudyController extends BaseController
             'title'              => 'Ficha del Caso | PACS Online',
             'studyUid'           => $studyUid,
             'study'              => $study,
-            'patients'           => $patients,
             'doctors'            => $doctors,
             'attachments'        => $attachments,
             'dicomDocs'          => $dicomDocs,
             'report'             => $report,
             'isOwner'            => $isOwner,
-            'canEditCaseContent' => $user->can('users.manage') || $isOwner,
-            'sendableNodes'      => $user->can('users.manage')
+            'canEditCaseContent' => $canAssign,
+            'sendableNodes'      => $canSend
                 ? model(\App\Models\MedicalCenterModel::class)->findSendable()
                 : [],
         ]);
     }
 
     /////////////////////////////////////////////////////////////////////////////
-    // Actualiza paciente, médico asignado, prioridad y centro del caso.       //
+    // Actualiza médico asignado y prioridad del caso.                         //
     /////////////////////////////////////////////////////////////////////////////
     public function updateCase(string $studyUid): RedirectResponse
     {
-        if (! auth()->user()?->can('users.manage')) {
+        if (! auth()->user()?->can('studies.assign')) {
             return redirect()->to('/studies')->with('error', 'Sin permiso para editar.');
         }
 
@@ -510,10 +464,6 @@ class StudyController extends BaseController
             'orthanc_id' => [
                 'label' => 'ID de Orthanc',
                 'rules' => 'permit_empty|max_length[128]',
-            ],
-            'patient_user_id' => [
-                'label' => 'Paciente',
-                'rules' => 'permit_empty|integer',
             ],
             'assigned_doctor_id' => [
                 'label' => 'Médico',
@@ -537,7 +487,6 @@ class StudyController extends BaseController
         $newDoctorId      = ! empty($data['assigned_doctor_id']) ? (int) $data['assigned_doctor_id'] : null;
 
         $updateData = [
-            'owner_user_id'      => ! empty($data['patient_user_id']) ? (int) $data['patient_user_id'] : null,
             'assigned_doctor_id' => $newDoctorId,
             'priority'           => $data['priority'],
         ];
@@ -574,9 +523,9 @@ class StudyController extends BaseController
     public function editDicom(string $studyUid): string|RedirectResponse
     {
         $user = auth()->user();
-        if ($user === null || ! $user->inGroup('admin')) {
+        if ($user === null || ! $user->can('studies.edit_dicom')) {
             return redirect()->to('/studies/case/' . urlencode($studyUid))
-                ->with('error', 'Solo un administrador puede modificar los datos DICOM.');
+                ->with('error', 'Solo un supervisor puede modificar los datos DICOM.');
         }
 
         $studyModel = model(StudyModel::class);
@@ -622,9 +571,9 @@ class StudyController extends BaseController
     public function updateDicomPatient(string $studyUid): RedirectResponse
     {
         $user = auth()->user();
-        if ($user === null || ! $user->inGroup('admin')) {
+        if ($user === null || ! $user->can('studies.edit_dicom')) {
             return redirect()->to('/studies/case/' . urlencode($studyUid))
-                ->with('error', 'Solo un administrador puede modificar los datos DICOM.');
+                ->with('error', 'Solo un supervisor puede modificar los datos DICOM.');
         }
 
         $rules = [
@@ -654,7 +603,7 @@ class StudyController extends BaseController
             ],
             'study_date' => [
                 'label' => 'Fecha del estudio',
-                'rules' => 'permit_empty|regex_match[/^\d{4}-\d{2}-\d{2}$/]',
+                'rules' => 'permit_empty|regex_match[/^(?:\d{2}\/\d{2}\/\d{4}|\d{4}-\d{2}-\d{2})$/]',
             ],
             'accession_number' => [
                 'label' => 'Número de acceso',
@@ -729,8 +678,14 @@ class StudyController extends BaseController
             $studyTags['StudyDescription'] = $newDesc;
         }
 
-        $newStudyDate = trim((string) ($data['study_date'] ?? ''));
+        $newStudyDate = normalize_date_filter((string) ($data['study_date'] ?? ''));
         if ($newStudyDate !== '') {
+            [$sy, $sm, $sd] = array_map('intval', explode('-', $newStudyDate));
+            if (! checkdate($sm, $sd, $sy)) {
+                return redirect()->back()->withInput()->with('errors', [
+                    'study_date' => 'La fecha del estudio no es válida.',
+                ]);
+            }
             $studyTags['StudyDate'] = str_replace('-', '', $newStudyDate);
         }
 
@@ -834,7 +789,7 @@ class StudyController extends BaseController
         $record     = $studyModel->findByStudyUid($studyUid);
         $isOwner    = $record !== null && (int) $record['owner_user_id'] === (int) $user->id;
 
-        if (! $user->can('users.manage') && ! $isOwner) {
+        if (! $user->can('studies.assign')) {
             return redirect()->to('/studies')->with('error', 'Sin permiso para editar notas.');
         }
 
@@ -884,7 +839,7 @@ class StudyController extends BaseController
         $study   = model(StudyModel::class)->findByStudyUid($studyUid);
         $isOwner = $study !== null && (int) $study['owner_user_id'] === (int) $user->id;
 
-        if (! $user->can('users.manage') && ! $user->can('reports.review') && ! $isOwner) {
+        if (! $user->can('studies.attachments')) {
             return redirect()->to('/studies')->with('error', 'Sin permiso para adjuntar.');
         }
 
@@ -1078,7 +1033,7 @@ class StudyController extends BaseController
         $isOwner    = $study !== null && (int) $study['owner_user_id'] === (int) $user->id;
         $isUploader = (int) $att['uploaded_by_user_id'] === (int) $user->id;
 
-        if (! $user->can('users.manage') && ! $isOwner && ! $isUploader) {
+        if (! $user->can('studies.delete') && ! ($user->can('reports.review') && $isUploader)) {
             return redirect()->to('/studies')->with('error', 'Sin permiso para eliminar.');
         }
 
@@ -1099,7 +1054,7 @@ class StudyController extends BaseController
     public function delete(string $studyUid): RedirectResponse
     {
         $user = auth()->user();
-        if ($user === null || ! $user->can('users.manage')) {
+        if ($user === null || ! $user->can('studies.delete')) {
             return redirect()->to('/studies')->with('error', 'Sin permiso para eliminar.');
         }
 
@@ -1153,7 +1108,7 @@ class StudyController extends BaseController
         };
 
         $user = auth()->user();
-        if ($user === null || ! $user->can('users.manage')) {
+        if ($user === null || ! $user->can('studies.send')) {
             return $respond(false, 'Sin permiso para enviar estudios.', 403);
         }
 
@@ -1249,16 +1204,19 @@ class StudyController extends BaseController
     }
 
     /**
-     * Obtiene usuarios pertenecientes a un grupo concreto indexados por ID.
+     * Obtiene usuarios pertenecientes a uno o varios grupos indexados por ID.
+     *
+     * @param list<string> $groups
      *
      * @return array<int, User>
      */
-    private function usersByGroup(string $group): array
+    private function usersByGroups(array $groups): array
     {
         $rows = auth()->getProvider()
             ->select('users.*')
             ->join('auth_groups_users', 'auth_groups_users.user_id = users.id')
-            ->where('auth_groups_users.group', $group)
+            ->whereIn('auth_groups_users.group', $groups)
+            ->groupBy('users.id')
             ->orderBy('users.id', 'ASC')
             ->findAll();
 

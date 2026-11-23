@@ -40,20 +40,8 @@
 
       <hr class="my-4">
 
-      <div class="row g-3 mb-3">
-        <div class="col-md-6">
-          <label for="patient_user_id" class="form-label fw-semibold">Asignar a paciente existente (opcional)</label>
-          <select class="form-select" id="patient_user_id" name="patient_user_id">
-            <option value="">-- Sin asignar --</option>
-            <?php foreach ($patients as $pid => $pUser): ?>
-              <option value="<?= (int) $pid ?>" <?= old('patient_user_id') == $pid ? 'selected' : '' ?>>
-                <?= esc($pUser->full_name ?: $pUser->username) ?> (ID: <?= (int) $pid ?>)
-              </option>
-            <?php endforeach; ?>
-          </select>
-        </div>
-
-        <div class="col-md-6">
+      <div class="row g-3 mb-4">
+        <div class="col-md-4">
           <label for="center_id" class="form-label fw-semibold">Centro médico remitente (opcional)</label>
           <select class="form-select" id="center_id" name="center_id">
             <option value="">-- Subida directa / Sin centro --</option>
@@ -65,7 +53,7 @@
           </select>
         </div>
 
-        <div class="col-md-6">
+        <div class="col-md-4">
           <label for="assigned_doctor_id" class="form-label fw-semibold">Médico informante (opcional)</label>
           <select class="form-select" id="assigned_doctor_id" name="assigned_doctor_id">
             <option value="">-- Cualquier médico --</option>
@@ -77,30 +65,12 @@
           </select>
         </div>
 
-        <div class="col-md-6">
+        <div class="col-md-4">
           <label for="priority" class="form-label fw-semibold">Prioridad</label>
           <select class="form-select" id="priority" name="priority">
             <option value="normal" <?= old('priority', 'normal') === 'normal' ? 'selected' : '' ?>>Normal</option>
             <option value="urgent" <?= old('priority') === 'urgent' ? 'selected' : '' ?>>Urgente</option>
           </select>
-        </div>
-      </div>
-
-      <div class="mb-4 p-3 rounded-3 border bg-body-tertiary">
-        <div class="form-check form-switch mb-0">
-          <input class="form-check-input" type="checkbox" id="toggleNewPatient">
-          <label class="form-check-label fw-semibold" for="toggleNewPatient">Crear cuenta de paciente nuevo al subir</label>
-        </div>
-        <div class="row g-3 mt-1 d-none" id="newPatientFields">
-          <div class="col-md-6">
-            <label for="new_patient_name" class="form-label fw-semibold">Nombre completo del paciente</label>
-            <input type="text" class="form-control" id="new_patient_name" name="new_patient_name" placeholder="Ej: Juan Pérez" value="<?= esc(old('new_patient_name')) ?>">
-          </div>
-          <div class="col-md-6">
-            <label for="new_patient_email" class="form-label fw-semibold">Correo del paciente</label>
-            <input type="email" class="form-control" id="new_patient_email" name="new_patient_email" placeholder="paciente@correo.com" value="<?= esc(old('new_patient_email')) ?>">
-            <div class="form-text">Se generará una contraseña temporal automáticamente.</div>
-          </div>
         </div>
       </div>
 

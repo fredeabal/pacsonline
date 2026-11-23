@@ -1,7 +1,10 @@
 <?= view('template/header') ?>
 
 <?php
-  $backUrl = auth()->user()?->can('reports.review') ? base_url('reports') : base_url('studies');
+  $currentUser = auth()->user();
+  $backUrl     = ($currentUser?->can('reports.review') && ! $currentUser?->can('users.manage'))
+      ? base_url('reports')
+      : base_url('studies');
   $modality = extract_study_modality($study ?? []);
   $priority = $study['priority'] ?? 'normal';
 ?>
@@ -21,17 +24,17 @@
   <div class="card-header bg-primary-subtle d-flex flex-wrap justify-content-between align-items-center gap-2">
     <h5 class="mb-0 text-primary fw-semibold">Resumen del estudio</h5>
     <div class="d-flex flex-wrap gap-2">
-      <?php if (auth()->user()?->inGroup('admin')): ?>
+      <?php if ($currentUser?->can('studies.edit_dicom')): ?>
         <a href="<?= base_url('studies/case/' . urlencode($studyUid) . '/dicom') ?>" class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1">
-          <i class="ti ti-user-edit"></i> <span class="d-none d-sm-inline">Editar datos DICOM</span>
+          <i class="ti ti-edit"></i> <span class="d-none d-sm-inline">Editar datos DICOM</span>
         </a>
       <?php endif; ?>
-      <?php if (empty($report) && auth()->user()?->can('reports.review')): ?>
+      <?php if (empty($report) && $currentUser?->can('reports.review')): ?>
         <a href="<?= base_url('reports/edit/' . urlencode($studyUid)) ?>" class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1">
           <i class="ti ti-stethoscope"></i> Informar
         </a>
       <?php endif; ?>
-      <?php if (auth()->user()?->can('studies.view_all')): ?>
+      <?php if ($currentUser?->can('studies.share')): ?>
         <a href="<?= base_url('studies/patient-access/' . urlencode($studyUid)) ?>" class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1">
           <i class="ti ti-user-check"></i> <span class="d-none d-sm-inline">Acceso paciente</span>
         </a>
@@ -98,7 +101,7 @@
   </div>
 </div>
 
-<?php if (auth()->user()?->can('users.manage')): ?>
+<?php if ($currentUser?->can('studies.assign')): ?>
 <div class="card mb-4">
   <div class="card-header bg-primary-subtle d-flex justify-content-between align-items-center">
     <h5 class="mb-0 text-primary fw-semibold">Asignación y prioridad del caso</h5>
@@ -110,19 +113,7 @@
       <input type="hidden" name="orthanc_id" value="<?= esc($study['orthanc_id'] ?? '') ?>">
 
       <div class="row g-3">
-        <div class="col-md-4">
-          <label for="patient_user_id" class="form-label fw-semibold">Paciente</label>
-          <select class="form-select" id="patient_user_id" name="patient_user_id">
-            <option value="">-- Sin asignar --</option>
-            <?php foreach ($patients as $pid => $pUser): ?>
-              <option value="<?= (int) $pid ?>" <?= ((int) ($study['owner_user_id'] ?? 0) === (int) $pid) ? 'selected' : '' ?>>
-                <?= esc($pUser->full_name ?: $pUser->username) ?> (ID: <?= (int) $pid ?>)
-              </option>
-            <?php endforeach; ?>
-          </select>
-        </div>
-
-        <div class="col-md-4">
+        <div class="col-md-6">
           <label for="assigned_doctor_id" class="form-label fw-semibold">Médico informante</label>
           <select class="form-select" id="assigned_doctor_id" name="assigned_doctor_id">
             <option value="">-- Cualquier médico --</option>
@@ -134,7 +125,7 @@
           </select>
         </div>
 
-        <div class="col-md-4">
+        <div class="col-md-6">
           <label for="priority" class="form-label fw-semibold">Prioridad</label>
           <select class="form-select" id="priority" name="priority">
             <option value="normal" <?= ($study['priority'] ?? 'normal') === 'normal' ? 'selected' : '' ?>>Normal</option>
@@ -244,9 +235,8 @@
                       </li>
                     <?php endif; ?>
                     <?php
-                      $currentUser     = auth()->user();
                       $canDeleteReport = $currentUser !== null && (
-                          $currentUser->can('users.manage')
+                          $currentUser->can('studies.delete')
                           || ($currentUser->can('reports.review') && (int) ($report['doctor_user_id'] ?? 0) === (int) $currentUser->id)
                       );
                     ?>
@@ -321,7 +311,7 @@
                         <i class="ti ti-eye fs-5"></i> Ver / Descargar
                       </a>
                     </li>
-                    <?php if (auth()->user()?->can('users.manage') || ! empty($isOwner) || (int) ($att['uploaded_by_user_id'] ?? 0) === (int) auth()->id()): ?>
+                    <?php if ($currentUser?->can('studies.delete') || ($currentUser?->can('reports.review') && (int) ($att['uploaded_by_user_id'] ?? 0) === (int) auth()->id())): ?>
                       <li><hr class="dropdown-divider"></li>
                       <li>
                         <form action="<?= base_url('studies/attachment/' . (int) $att['id'] . '/delete') ?>" method="post" class="delete-attachment-form">
@@ -344,7 +334,7 @@
   </div>
 </div>
 
-<?php if (! empty($canEditCaseContent) || auth()->user()?->can('reports.review')): ?>
+<?php if ($currentUser?->can('studies.attachments')): ?>
 <div class="card mb-4">
   <div class="card-header bg-primary-subtle">
     <h5 class="mb-0 text-primary fw-semibold">Adjuntar documentos clínicos</h5>
@@ -367,7 +357,7 @@
 </div>
 <?php endif; ?>
 
-<?php if (auth()->user()?->can('users.manage') && ! empty($sendableNodes)): ?>
+<?php if ($currentUser?->can('studies.send') && ! empty($sendableNodes)): ?>
 <div class="card mb-4">
   <div class="card-header bg-primary-subtle">
     <h5 class="mb-0 text-primary fw-semibold">Enviar estudio a nodo DICOM</h5>

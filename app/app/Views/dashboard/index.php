@@ -1,4 +1,4 @@
-<?php /** Vista principal del Dashboard: métricas globales (admin), worklist (médico) o estudios propios (paciente). */ ?>
+<?php /** Vista principal del Dashboard adaptada al rol: Supervisor, Médico, Usuario u Observador. */ ?>
 <?= view('template/header') ?>
 
 <div class="row">
@@ -9,15 +9,18 @@
           <?php if ($roleMode === 'medico'): ?>
             <h4 class="fw-bold mb-1">Panel Médico</h4>
             <p class="text-muted mb-0">Revisa los estudios pendientes en tu Worklist y emite informes médicos.</p>
-          <?php elseif ($roleMode === 'paciente'): ?>
-            <h4 class="fw-bold mb-1">Portal del Paciente</h4>
-            <p class="text-muted mb-0">Consulta tus estudios médicos, descarga tus informes en PDF o compártelos con otros especialistas.</p>
+          <?php elseif ($roleMode === 'usuario'): ?>
+            <h4 class="fw-bold mb-1">Panel de Gestión PACS</h4>
+            <p class="text-muted mb-0">Consulta estudios, sube archivos DICOM, reenvía a nodos y genera enlaces de envío para pacientes.</p>
+          <?php elseif ($roleMode === 'observador'): ?>
+            <h4 class="fw-bold mb-1">Panel de Consulta PACS</h4>
+            <p class="text-muted mb-0">Visualiza los casos clínicos, el visor DICOM y los informes médicos publicados.</p>
           <?php else: ?>
-            <h4 class="fw-bold mb-1">Panel de Administración PACS</h4>
-            <p class="text-muted mb-0">Gestiona estudios, usuarios, centros médicos remitentes y configuración de la plataforma.</p>
+            <h4 class="fw-bold mb-1">Panel de Supervisión PACS</h4>
+            <p class="text-muted mb-0">Gestiona estudios, informes médicos, usuarios, centros remitentes y configuración de la plataforma.</p>
           <?php endif; ?>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex flex-wrap gap-2">
           <?php if ($roleMode === 'medico'): ?>
             <a href="<?= base_url('reports') ?>" class="btn btn-sm btn-primary">
               <i class="ti ti-stethoscope me-1"></i> Ir al Worklist
@@ -25,13 +28,23 @@
             <a href="<?= base_url('templates') ?>" class="btn btn-sm btn-outline-primary">
               <i class="ti ti-template me-1"></i> Mis Plantillas
             </a>
-          <?php elseif ($roleMode === 'paciente'): ?>
+          <?php elseif ($roleMode === 'usuario'): ?>
+            <a href="<?= base_url('studies/upload') ?>" class="btn btn-sm btn-primary">
+              <i class="ti ti-cloud-upload me-1"></i> Subir Estudio
+            </a>
+            <a href="<?= base_url('studies') ?>" class="btn btn-sm btn-outline-primary">
+              <i class="ti ti-report-medical me-1"></i> Ver Estudios
+            </a>
+          <?php elseif ($roleMode === 'observador'): ?>
             <a href="<?= base_url('studies') ?>" class="btn btn-sm btn-primary">
-              <i class="ti ti-report-medical me-1"></i> Ver Mis Estudios
+              <i class="ti ti-report-medical me-1"></i> Ver Estudios
             </a>
           <?php else: ?>
             <a href="<?= base_url('studies/upload') ?>" class="btn btn-sm btn-primary">
               <i class="ti ti-cloud-upload me-1"></i> Subir Estudio
+            </a>
+            <a href="<?= base_url('reports') ?>" class="btn btn-sm btn-outline-primary">
+              <i class="ti ti-stethoscope me-1"></i> Informar
             </a>
             <a href="<?= base_url('studies') ?>" class="btn btn-sm btn-outline-primary">
               <i class="ti ti-report-medical me-1"></i> Ver Estudios
@@ -44,13 +57,13 @@
 </div>
 
 <div class="row g-3 mb-4">
-  <?php if ($roleMode === 'paciente'): ?>
+  <?php if ($roleMode === 'observador'): ?>
     <div class="col-md-6">
       <div class="card border-0 shadow-sm h-100">
         <div class="card-body d-flex align-items-center gap-3">
           <span class="rounded-3 bg-primary-subtle text-primary p-3"><i class="ti ti-report-medical fs-7"></i></span>
           <div>
-            <span class="text-muted fs-2 d-block">Mis Estudios</span>
+            <span class="text-muted fs-2 d-block">Estudios en PACS</span>
             <h3 class="fw-bold mb-0"><?= (int) $totalStudies ?></h3>
           </div>
         </div>
@@ -61,7 +74,41 @@
         <div class="card-body d-flex align-items-center gap-3">
           <span class="rounded-3 bg-success-subtle text-success p-3"><i class="ti ti-file-check fs-7"></i></span>
           <div>
-            <span class="text-muted fs-2 d-block">Informes Listos</span>
+            <span class="text-muted fs-2 d-block">Informes Publicados</span>
+            <h3 class="fw-bold mb-0"><?= (int) $reportedCount ?></h3>
+          </div>
+        </div>
+      </div>
+    </div>
+  <?php elseif ($roleMode === 'usuario'): ?>
+    <div class="col-md-4">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body d-flex align-items-center gap-3">
+          <span class="rounded-3 bg-primary-subtle text-primary p-3"><i class="ti ti-report-medical fs-7"></i></span>
+          <div>
+            <span class="text-muted fs-2 d-block">Estudios en PACS</span>
+            <h3 class="fw-bold mb-0"><?= (int) $totalStudies ?></h3>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body d-flex align-items-center gap-3">
+          <span class="rounded-3 bg-info-subtle text-info p-3"><i class="ti ti-clock fs-7"></i></span>
+          <div>
+            <span class="text-muted fs-2 d-block">Pendientes por Informar</span>
+            <h3 class="fw-bold mb-0"><?= (int) $pendingCount ?></h3>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body d-flex align-items-center gap-3">
+          <span class="rounded-3 bg-success-subtle text-success p-3"><i class="ti ti-file-check fs-7"></i></span>
+          <div>
+            <span class="text-muted fs-2 d-block">Informados</span>
             <h3 class="fw-bold mb-0"><?= (int) $reportedCount ?></h3>
           </div>
         </div>
@@ -207,9 +254,7 @@
 
 <div class="card">
   <div class="card-header bg-primary-subtle d-flex align-items-center justify-content-between">
-    <h5 class="mb-0 text-primary fw-semibold">
-      <?= $roleMode === 'paciente' ? 'Mis estudios recientes' : 'Estudios recientes' ?>
-    </h5>
+    <h5 class="mb-0 text-primary fw-semibold">Estudios recientes</h5>
     <a href="<?= base_url($roleMode === 'medico' ? 'reports' : 'studies') ?>" class="btn btn-sm btn-outline-primary">Ver todos</a>
   </div>
   <div class="card-body">
@@ -270,7 +315,7 @@
                     <i class="ti ti-dots-vertical fs-6"></i>
                   </button>
                   <ul class="dropdown-menu dropdown-menu-end shadow-sm">
-                    <?php if ($roleMode === 'medico'): ?>
+                    <?php if (auth()->user()?->can('reports.review')): ?>
                       <li>
                         <a class="dropdown-item d-flex align-items-center gap-2" href="<?= base_url('reports/edit/' . urlencode($uid)) ?>">
                           <i class="ti ti-stethoscope fs-5"></i> Informar estudio
@@ -294,7 +339,7 @@
                         </a>
                       </li>
                     <?php endif; ?>
-                    <?php if (auth()->user()?->can('studies.view_all')): ?>
+                    <?php if (auth()->user()?->can('studies.share')): ?>
                       <li>
                         <a class="dropdown-item d-flex align-items-center gap-2" href="<?= base_url('studies/patient-access/' . urlencode($uid)) ?>">
                           <i class="ti ti-user-check fs-5"></i> Acceso paciente<?= ! empty($study['_active_patient_links']) ? ' (' . (int) $study['_active_patient_links'] . ')' : '' ?>
@@ -347,7 +392,7 @@
                     <i class="ti ti-dots-vertical fs-6"></i>
                   </button>
                 <ul class="dropdown-menu dropdown-menu-end shadow-sm">
-                  <?php if ($roleMode === 'medico'): ?>
+                  <?php if (auth()->user()?->can('reports.review')): ?>
                     <li>
                       <a class="dropdown-item d-flex align-items-center gap-2" href="<?= base_url('reports/edit/' . urlencode($uid)) ?>">
                         <i class="ti ti-stethoscope fs-5"></i> Informar estudio
@@ -371,7 +416,7 @@
                       </a>
                     </li>
                   <?php endif; ?>
-                  <?php if (auth()->user()?->can('studies.view_all')): ?>
+                  <?php if (auth()->user()?->can('studies.share')): ?>
                     <li>
                       <a class="dropdown-item d-flex align-items-center gap-2" href="<?= base_url('studies/patient-access/' . urlencode($uid)) ?>">
                         <i class="ti ti-user-check fs-5"></i> Acceso paciente<?= ! empty($study['_active_patient_links']) ? ' (' . (int) $study['_active_patient_links'] . ')' : '' ?>

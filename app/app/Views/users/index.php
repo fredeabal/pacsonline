@@ -38,13 +38,16 @@
               </td>
             </tr>
           <?php else: ?>
+            <?php $roleGroups = config('AuthGroups')->groups; ?>
             <?php foreach ($users as $u):
-              $groups = $u->getGroups();
-              $role   = $groups[0] ?? 'paciente';
-              $badge  = match ($role) {
-                  'admin'  => 'bg-danger-subtle text-danger border border-danger-subtle fs-2',
-                  'medico' => 'bg-primary-subtle text-primary border border-primary-subtle fs-2',
-                  default  => 'bg-info-subtle text-info border border-info-subtle fs-2',
+              $groups    = $u->getGroups();
+              $role      = $groups[0] ?? 'observador';
+              $roleLabel = $roleGroups[$role]['title'] ?? ucfirst($role);
+              $badge     = match ($role) {
+                  'admin'   => 'bg-danger-subtle text-danger border border-danger-subtle fs-2',
+                  'medico'  => 'bg-primary-subtle text-primary border border-primary-subtle fs-2',
+                  'usuario' => 'bg-info-subtle text-info border border-info-subtle fs-2',
+                  default   => 'bg-secondary-subtle text-secondary border border-secondary-subtle fs-2',
               };
             ?>
             <tr style="cursor: pointer;" onclick="window.location.href='<?= base_url('users/edit/' . (int) $u->id) ?>'">
@@ -56,7 +59,7 @@
               </td>
               <td class="text-muted"><?= esc($u->email) ?></td>
               <td class="text-center">
-                <span class="badge <?= $badge ?> fw-semibold"><?= esc(ucfirst($role)) ?></span>
+                <span class="badge <?= $badge ?> fw-semibold"><?= esc($roleLabel) ?></span>
               </td>
               <td class="text-center">
                 <?php if ($u->active): ?>
@@ -109,13 +112,16 @@
           <span>No hay usuarios registrados.</span>
         </div>
       <?php else: ?>
+        <?php $roleGroups = config('AuthGroups')->groups; ?>
         <?php foreach ($users as $u):
-          $groups = $u->getGroups();
-          $role   = $groups[0] ?? 'paciente';
-          $badge  = match ($role) {
-              'admin'  => 'bg-danger-subtle text-danger border border-danger-subtle fs-2',
-              'medico' => 'bg-primary-subtle text-primary border border-primary-subtle fs-2',
-              default  => 'bg-info-subtle text-info border border-info-subtle fs-2',
+          $groups    = $u->getGroups();
+          $role      = $groups[0] ?? 'observador';
+          $roleLabel = $roleGroups[$role]['title'] ?? ucfirst($role);
+          $badge     = match ($role) {
+              'admin'   => 'bg-danger-subtle text-danger border border-danger-subtle fs-2',
+              'medico'  => 'bg-primary-subtle text-primary border border-primary-subtle fs-2',
+              'usuario' => 'bg-info-subtle text-info border border-info-subtle fs-2',
+              default   => 'bg-secondary-subtle text-secondary border border-secondary-subtle fs-2',
           };
         ?>
         <div class="card border shadow-sm mb-3 mobile-card-item" style="cursor: pointer;" onclick="window.location.href='<?= base_url('users/edit/' . (int) $u->id) ?>'">
@@ -125,7 +131,7 @@
               <div>
                 <strong class="d-block fw-semibold text-body"><?= esc($u->full_name ?: $u->username) ?></strong>
                 <span class="text-muted small d-block mb-1"><?= esc($u->email) ?></span>
-                <span class="badge <?= $badge ?> fw-semibold"><?= esc(ucfirst($role)) ?></span>
+                <span class="badge <?= $badge ?> fw-semibold"><?= esc($roleLabel) ?></span>
               </div>
             </div>
             <div class="d-flex align-items-center gap-2 flex-shrink-0">

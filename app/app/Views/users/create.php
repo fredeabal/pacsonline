@@ -9,7 +9,10 @@
   </div>
 
   <div class="card-body">
-    <?php $selectedRole = old('role', 'paciente'); ?>
+    <?php
+      $selectedRole = old('role', 'observador');
+      $showsMedical = in_array($selectedRole, ['medico', 'admin'], true);
+    ?>
     <form action="<?= base_url('users') ?>" method="post">
       <?= csrf_field() ?>
 
@@ -29,21 +32,22 @@
           <input type="email" class="form-control" id="email" name="email" value="<?= esc(old('email')) ?>" required>
         </div>
 
-        <div class="<?= $selectedRole === 'medico' ? 'col-md-4' : 'col-12' ?>" id="roleCol">
+        <div class="<?= $showsMedical ? 'col-md-4' : 'col-12' ?>" id="roleCol">
           <label for="role" class="form-label fw-semibold">Rol en el PACS</label>
           <select class="form-select" id="role" name="role" required>
-            <option value="paciente" <?= $selectedRole === 'paciente' ? 'selected' : '' ?>>Paciente</option>
+            <option value="observador" <?= $selectedRole === 'observador' ? 'selected' : '' ?>>Observador</option>
+            <option value="usuario" <?= $selectedRole === 'usuario' ? 'selected' : '' ?>>Usuario</option>
             <option value="medico" <?= $selectedRole === 'medico' ? 'selected' : '' ?>>Médico Informante</option>
-            <option value="admin" <?= $selectedRole === 'admin' ? 'selected' : '' ?>>Administrador</option>
+            <option value="admin" <?= $selectedRole === 'admin' ? 'selected' : '' ?>>Supervisor</option>
           </select>
         </div>
 
-        <div class="col-md-4 doctor-only-field <?= $selectedRole !== 'medico' ? 'd-none' : '' ?>">
+        <div class="col-md-4 doctor-only-field <?= ! $showsMedical ? 'd-none' : '' ?>">
           <label for="specialty" class="form-label fw-semibold">Especialidad</label>
           <input type="text" class="form-control" id="specialty" name="specialty" value="<?= esc(old('specialty')) ?>">
         </div>
 
-        <div class="col-md-4 doctor-only-field <?= $selectedRole !== 'medico' ? 'd-none' : '' ?>">
+        <div class="col-md-4 doctor-only-field <?= ! $showsMedical ? 'd-none' : '' ?>">
           <label for="license_number" class="form-label fw-semibold">Nº de Colegiado</label>
           <input type="text" class="form-control" id="license_number" name="license_number" value="<?= esc(old('license_number')) ?>">
         </div>
@@ -85,13 +89,13 @@
     if (!roleSelect || !doctorFields.length) return;
 
     function toggleDoctorFields() {
-      const isMedico = roleSelect.value === 'medico';
+      const showsMedical = roleSelect.value === 'medico' || roleSelect.value === 'admin';
       if (roleCol) {
-        roleCol.classList.toggle('col-md-4', isMedico);
-        roleCol.classList.toggle('col-12', !isMedico);
+        roleCol.classList.toggle('col-md-4', showsMedical);
+        roleCol.classList.toggle('col-12', !showsMedical);
       }
       doctorFields.forEach(function(el) {
-        el.classList.toggle('d-none', !isMedico);
+        el.classList.toggle('d-none', !showsMedical);
       });
     }
 

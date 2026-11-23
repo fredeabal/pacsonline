@@ -21,9 +21,7 @@ class AuditController extends BaseController
             return redirect()->to('/')->with('error', 'Sin permiso.');
         }
 
-        $logs = model(AuditLogModel::class)
-            ->orderBy('created_at', 'DESC')
-            ->findAll(200);
+        $logs = model(AuditLogModel::class)->recentWithUsers(200);
 
         return view('audit/index', [
             'title' => 'Auditoría | PACS Online',

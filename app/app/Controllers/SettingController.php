@@ -30,23 +30,23 @@ class SettingController extends BaseController
             $currentTab = 'pacs';
         }
 
-        $dbPath          = WRITEPATH . 'pacs.sqlite';
-        $dbBytes         = is_file($dbPath) ? (int) filesize($dbPath) : 0;
-        $dbSizeFormatted = $dbBytes >= 1048576
-            ? number_format($dbBytes / 1048576, 2) . ' MB'
-            : number_format($dbBytes / 1024, 1) . ' KB';
+        $tempBytes = 0;
+        foreach (['cache', 'logs', 'session', 'debugbar'] as $dir) {
+            $tempBytes += $this->writableDirSize(WRITEPATH . $dir);
+        }
+        $tempSizeFormatted = $this->formatBytes($tempBytes);
 
         $pacsAet  = (string) (getenv('ORTHANC_AET') ?: 'PACSONLINE');
         $pacsPort = (int) (getenv('ORTHANC_DICOM_PORT') ?: getenv('DICOM_PORT') ?: 4242);
 
         return view('settings/index', [
-            'title'           => 'Configuración | PACS Online',
-            'currentTab'      => $currentTab,
-            'orthancAlive'    => $orthanc->isAlive(),
-            'pacsAet'         => $pacsAet,
-            'pacsPort'        => $pacsPort,
-            'dbSizeFormatted' => $dbSizeFormatted,
-            'logs'            => model(AuditLogModel::class)->orderBy('created_at', 'DESC')->findAll(200),
+            'title'             => 'Configuración | PACS Online',
+            'currentTab'        => $currentTab,
+            'orthancAlive'      => $orthanc->isAlive(),
+            'pacsAet'           => $pacsAet,
+            'pacsPort'          => $pacsPort,
+            'tempSizeFormatted' => $tempSizeFormatted,
+            'logs'            => model(AuditLogModel::class)->recentWithUsers(200),
             'smtp'         => [
                 'enabled'   => (bool) $settings->get('Smtp.enabled'),
                 'host'      => (string) ($settings->get('Smtp.host') ?? ''),
@@ -153,38 +153,129 @@ class SettingController extends BaseController
     }
 
     /////////////////////////////////////////////////////////////////////////////
-    // Genera y descarga una copia de seguridad de la base de datos SQLite.    //
+    // Limpia logs, sesiones antiguas, caché y debugbar de CodeIgniter 4.      //
     /////////////////////////////////////////////////////////////////////////////
-    public function downloadBackup(): \CodeIgniter\HTTP\ResponseInterface|RedirectResponse
+    public function clearTemp(): RedirectResponse
     {
         if (! auth()->user()?->can('settings.manage')) {
             return redirect()->to('/')->with('error', 'Sin permiso.');
         }
 
-        $dbPath = WRITEPATH . 'pacs.sqlite';
-        if (! is_file($dbPath)) {
-            return redirect()->to('/settings?tab=maintenance')->with('error', 'Base de datos no encontrada.');
+        cache()->clean();
+
+        $activeSessionFile = '';
+        $sid               = session_id();
+        if ($sid !== '') {
+            $activeSessionFile = config('Session')->cookieName . $sid;
         }
 
-        $tmpFile = WRITEPATH . 'cache/backup_' . date('Ymd_His') . '.sqlite';
-        $src     = new \SQLite3($dbPath, SQLITE3_OPEN_READONLY);
-        $dst     = new \SQLite3($tmpFile);
-        $src->backup($dst);
-        $src->close();
-        $dst->close();
+        $targets = [
+            'cache'    => [],
+            'logs'     => [],
+            'debugbar' => [],
+            'session'  => $activeSessionFile !== '' ? [$activeSessionFile] : [],
+        ];
 
-        $bytes = file_get_contents($tmpFile);
-        @unlink($tmpFile);
+        $totalFiles = 0;
+        $totalBytes = 0;
 
-        if ($bytes === false) {
-            return redirect()->to('/settings?tab=maintenance')->with('error', 'No se pudo generar la copia.');
+        foreach ($targets as $dir => $exclude) {
+            $stats       = $this->clearWritableDirectory(WRITEPATH . $dir, $exclude);
+            $totalFiles += $stats['files'];
+            $totalBytes += $stats['bytes'];
         }
 
-        AuditLogModel::record('settings.backup_downloaded', null, null, 'Backup SQLite descargado', $this->request);
+        $freedFormatted = $this->formatBytes($totalBytes);
+        AuditLogModel::record(
+            'settings.temp_cleared',
+            null,
+            null,
+            "Limpieza CI4: {$totalFiles} archivos eliminados ({$freedFormatted})",
+            $this->request
+        );
 
-        return $this->response
-            ->setHeader('Content-Type', 'application/octet-stream')
-            ->setHeader('Content-Disposition', 'attachment; filename="pacs-db-' . date('Ymd-His') . '.sqlite"')
-            ->setBody($bytes);
+        return redirect()->to('/settings?tab=maintenance')
+            ->with('message', "Limpieza completada: {$totalFiles} archivo(s) eliminado(s), {$freedFormatted} liberados (sesión activa conservada).");
+    }
+
+    /**
+     * Elimina archivos temporales de un subdirectorio de writable/ conservando archivos base.
+     *
+     * @param list<string> $exclude
+     *
+     * @return array{files: int, bytes: int}
+     */
+    private function clearWritableDirectory(string $dir, array $exclude = []): array
+    {
+        if (! is_dir($dir)) {
+            return ['files' => 0, 'bytes' => 0];
+        }
+
+        $protected = array_merge(['.', '..', 'index.html', '.htaccess', '.gitkeep'], $exclude);
+        $files     = 0;
+        $bytes     = 0;
+
+        $entries = scandir($dir);
+        if ($entries === false) {
+            return ['files' => 0, 'bytes' => 0];
+        }
+
+        foreach ($entries as $entry) {
+            if (in_array($entry, $protected, true)) {
+                continue;
+            }
+
+            $path = $dir . DIRECTORY_SEPARATOR . $entry;
+            if (! is_file($path)) {
+                continue;
+            }
+
+            $size = (int) @filesize($path);
+            if (@unlink($path)) {
+                $files++;
+                $bytes += $size;
+            }
+        }
+
+        return ['files' => $files, 'bytes' => $bytes];
+    }
+
+    /**
+     * Calcula el tamaño en bytes de los archivos limpiables en un subdirectorio de writable/.
+     */
+    private function writableDirSize(string $dir): int
+    {
+        if (! is_dir($dir)) {
+            return 0;
+        }
+
+        $protected = ['.', '..', 'index.html', '.htaccess', '.gitkeep'];
+        $entries   = scandir($dir);
+        if ($entries === false) {
+            return 0;
+        }
+
+        $bytes = 0;
+        foreach ($entries as $entry) {
+            if (in_array($entry, $protected, true)) {
+                continue;
+            }
+            $path = $dir . DIRECTORY_SEPARATOR . $entry;
+            if (is_file($path)) {
+                $bytes += (int) @filesize($path);
+            }
+        }
+
+        return $bytes;
+    }
+
+    /**
+     * Formatea un tamaño en bytes a KB o MB legibles.
+     */
+    private function formatBytes(int $bytes): string
+    {
+        return $bytes >= 1048576
+            ? number_format($bytes / 1048576, 2) . ' MB'
+            : number_format($bytes / 1024, 1) . ' KB';
     }
 }

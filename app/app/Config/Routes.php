@@ -107,5 +107,5 @@ $routes->group('', ['filter' => 'session'], static function ($routes) {
     $routes->get('settings', [SettingController::class, 'index']);
     $routes->post('settings/smtp', [SettingController::class, 'saveSmtp']);
     $routes->post('settings/test-email', [SettingController::class, 'testEmail']);
-    $routes->get('settings/backup-db', [SettingController::class, 'downloadBackup']);
+    $routes->post('settings/clear-temp', [SettingController::class, 'clearTemp']);
 });

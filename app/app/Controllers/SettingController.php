@@ -39,6 +39,14 @@ class SettingController extends BaseController
         $pacsAet  = (string) (getenv('ORTHANC_AET') ?: 'PACSONLINE');
         $pacsPort = (int) (getenv('ORTHANC_DICOM_PORT') ?: getenv('DICOM_PORT') ?: 4242);
 
+        $auditFilters = [
+            'category' => (string) ($this->request->getGet('category') ?? 'all'),
+            'date'     => (string) ($this->request->getGet('date') ?? 'all'),
+            'q'        => (string) ($this->request->getGet('q') ?? ''),
+        ];
+        $auditPage = max(1, (int) ($this->request->getGet('page') ?? 1));
+        $auditData = model(AuditLogModel::class)->paginatedWithUsers($auditFilters, 50, $auditPage);
+
         return view('settings/index', [
             'title'             => 'Configuración | PACS Online',
             'currentTab'        => $currentTab,
@@ -46,7 +54,9 @@ class SettingController extends BaseController
             'pacsAet'           => $pacsAet,
             'pacsPort'          => $pacsPort,
             'tempSizeFormatted' => $tempSizeFormatted,
-            'logs'            => model(AuditLogModel::class)->recentWithUsers(200),
+            'logs'              => $auditData['logs'],
+            'auditData'         => $auditData,
+            'auditFilters'      => $auditFilters,
             'smtp'         => [
                 'enabled'   => (bool) $settings->get('Smtp.enabled'),
                 'host'      => (string) ($settings->get('Smtp.host') ?? ''),

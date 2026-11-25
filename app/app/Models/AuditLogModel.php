@@ -32,14 +32,15 @@ class AuditLogModel extends Model
         ?string $studyUid = null,
         ?int $shareId = null,
         ?string $details = null,
-        ?RequestInterface $request = null
+        ?RequestInterface $request = null,
+        ?int $userId = null
     ): void {
         $req = $request ?? service('request');
         $ip  = method_exists($req, 'getIPAddress') ? $req->getIPAddress() : null;
         $ua  = method_exists($req, 'getUserAgent') ? substr((string) $req->getUserAgent(), 0, 250) : null;
 
         model(self::class)->insert([
-            'user_id'            => auth()->id(),
+            'user_id'            => $userId ?? auth()->id(),
             'share_id'           => $shareId,
             'study_instance_uid' => $studyUid,
             'action'             => $action,
@@ -61,6 +62,118 @@ class AuditLogModel extends Model
             ->join('users', 'users.id = audit_logs.user_id', 'left')
             ->orderBy('audit_logs.created_at', 'DESC')
             ->findAll($limit);
+    }
+
+    /**
+     * Devuelve registros de auditoría paginados y filtrados en servidor.
+     *
+     * @param array{category?: string, date?: string, q?: string} $filters
+     * @return array{logs: list<array<string, mixed>>, total: int, page: int, perPage: int, totalPages: int}
+     */
+    public function paginatedWithUsers(array $filters = [], int $perPage = 50, int $page = 1): array
+    {
+        $perPage = max(1, min(200, $perPage));
+        $page    = max(1, $page);
+
+        $countBuilder = $this->builder();
+        $countBuilder->join('users', 'users.id = audit_logs.user_id', 'left');
+        $this->applyAuditFilters($countBuilder, $filters);
+        $total = (int) $countBuilder->countAllResults();
+
+        $totalPages = max(1, (int) ceil($total / $perPage));
+        if ($page > $totalPages) {
+            $page = $totalPages;
+        }
+        $offset = ($page - 1) * $perPage;
+
+        $dataBuilder = $this->builder();
+        $dataBuilder->select('audit_logs.*, users.username AS user_username, users.full_name AS user_full_name')
+            ->join('users', 'users.id = audit_logs.user_id', 'left');
+        $this->applyAuditFilters($dataBuilder, $filters);
+        $logs = $dataBuilder->orderBy('audit_logs.created_at', 'DESC')
+            ->limit($perPage, $offset)
+            ->get()
+            ->getResultArray();
+
+        return [
+            'logs'       => $logs,
+            'total'      => $total,
+            'page'       => $page,
+            'perPage'    => $perPage,
+            'totalPages' => $totalPages,
+        ];
+    }
+
+    /**
+     * Aplica filtros de categoría, rango de fecha y búsqueda textual al query builder.
+     *
+     * @param \CodeIgniter\Database\BaseBuilder $builder
+     * @param array{category?: string, date?: string, q?: string} $filters
+     */
+    private function applyAuditFilters($builder, array $filters): void
+    {
+        $category = (string) ($filters['category'] ?? 'all');
+        switch ($category) {
+            case 'auth':
+                $builder->like('audit_logs.action', 'auth.', 'after');
+                break;
+            case 'study':
+                $builder->groupStart()
+                    ->like('audit_logs.action', 'study.', 'after')
+                    ->orLike('audit_logs.action', 'ingest.', 'after')
+                    ->groupEnd();
+                break;
+            case 'report':
+                $builder->like('audit_logs.action', 'report.', 'after');
+                break;
+            case 'patient':
+                $builder->groupStart()
+                    ->like('audit_logs.action', 'patient_access.', 'after')
+                    ->orLike('audit_logs.action', 'notification.', 'after')
+                    ->groupEnd();
+                break;
+            case 'admin':
+                $builder->groupStart()
+                    ->like('audit_logs.action', 'user.', 'after')
+                    ->orLike('audit_logs.action', 'center.', 'after')
+                    ->orLike('audit_logs.action', 'settings.', 'after')
+                    ->orLike('audit_logs.action', 'profile.', 'after')
+                    ->groupEnd();
+                break;
+            case 'errors':
+                $builder->groupStart()
+                    ->like('audit_logs.action', '_failed', 'before')
+                    ->orWhereIn('audit_logs.action', [
+                        'patient_access.failed',
+                        'patient_access.locked',
+                        'patient_access.throttled',
+                    ])
+                    ->groupEnd();
+                break;
+        }
+
+        $date = (string) ($filters['date'] ?? 'all');
+        $cutoff = match ($date) {
+            'today' => date('Y-m-d 00:00:00'),
+            '24h'   => date('Y-m-d H:i:s', time() - 86400),
+            '7d'    => date('Y-m-d H:i:s', time() - 7 * 86400),
+            '30d'   => date('Y-m-d H:i:s', time() - 30 * 86400),
+            default => null,
+        };
+        if ($cutoff !== null) {
+            $builder->where('audit_logs.created_at >=', $cutoff);
+        }
+
+        $q = trim((string) ($filters['q'] ?? ''));
+        if ($q !== '') {
+            $builder->groupStart()
+                ->like('users.username', $q)
+                ->orLike('users.full_name', $q)
+                ->orLike('audit_logs.action', $q)
+                ->orLike('audit_logs.details', $q)
+                ->orLike('audit_logs.ip_address', $q)
+                ->groupEnd();
+        }
     }
 
     /**
@@ -117,6 +230,9 @@ class AuditLogModel extends Model
             'study.sent_dicom'                  => 'DICOM enviado',
             'study.uploaded'                    => 'Estudio subido',
             'ingest.dicom_received'             => 'DICOM recibido',
+            'auth.login'                        => 'Inicio de sesión',
+            'auth.login_failed'                 => 'Login fallido',
+            'auth.logout'                       => 'Cierre de sesión',
         ];
 
         return $labels[$action] ?? $action;

@@ -21,11 +21,20 @@ class AuditController extends BaseController
             return redirect()->to('/')->with('error', 'Sin permiso.');
         }
 
-        $logs = model(AuditLogModel::class)->recentWithUsers(200);
+        $filters = [
+            'category' => (string) ($this->request->getGet('category') ?? 'all'),
+            'date'     => (string) ($this->request->getGet('date') ?? 'all'),
+            'q'        => (string) ($this->request->getGet('q') ?? ''),
+        ];
+        $page = max(1, (int) ($this->request->getGet('page') ?? 1));
+
+        $auditData = model(AuditLogModel::class)->paginatedWithUsers($filters, 50, $page);
 
         return view('audit/index', [
-            'title' => 'Auditoría | PACS Online',
-            'logs'  => $logs,
+            'title'     => 'Auditoría | PACS Online',
+            'logs'      => $auditData['logs'],
+            'auditData' => $auditData,
+            'filters'   => $filters,
         ]);
     }
 }

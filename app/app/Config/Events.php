@@ -55,3 +55,43 @@ Events::on('pre_system', static function (): void {
         }
     }
 });
+
+/*
+ * --------------------------------------------------------------------
+ * Auditoría de inicios y cierres de sesión (CodeIgniter Shield)
+ * --------------------------------------------------------------------
+ */
+Events::on('login', static function ($user): void {
+    try {
+        $userId   = isset($user->id) ? (int) $user->id : null;
+        $identity = trim((string) ($user->username ?? $user->email ?? ''));
+        $details  = $identity !== '' ? "Inicio de sesión ({$identity})" : 'Inicio de sesión';
+        \App\Models\AuditLogModel::record('auth.login', null, null, $details, null, $userId);
+    } catch (\Throwable $e) {
+        log_message('error', 'Audit login error: ' . $e->getMessage());
+    }
+});
+
+Events::on('failedLogin', static function (array $credentials): void {
+    try {
+        $identity = trim((string) ($credentials['username'] ?? $credentials['email'] ?? ''));
+        $details  = $identity !== '' ? "Intento fallido ({$identity})" : 'Intento de inicio de sesión fallido';
+        \App\Models\AuditLogModel::record('auth.login_failed', null, null, $details);
+    } catch (\Throwable $e) {
+        log_message('error', 'Audit failedLogin error: ' . $e->getMessage());
+    }
+});
+
+Events::on('logout', static function ($user): void {
+    if ($user === null) {
+        return;
+    }
+    try {
+        $userId   = isset($user->id) ? (int) $user->id : null;
+        $identity = trim((string) ($user->username ?? $user->email ?? ''));
+        $details  = $identity !== '' ? "Cierre de sesión ({$identity})" : 'Cierre de sesión';
+        \App\Models\AuditLogModel::record('auth.logout', null, null, $details, null, $userId);
+    } catch (\Throwable $e) {
+        log_message('error', 'Audit logout error: ' . $e->getMessage());
+    }
+});

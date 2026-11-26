@@ -3570,6 +3570,12 @@ div:where(.swal2-container) div:where(.swal2-html-container) {
     }
 }
 
+/* Usar dynamic viewport height en vistas de autenticación para evitar scroll vertical en móviles */
+.auth-customizer-none .min-vh-100 {
+    min-height: 100vh !important;
+    min-height: 100dvh !important;
+}
+
 
 /* Remove card styling for auth views on mobile to match login layout */
 @media (max-width: 575.98px) {

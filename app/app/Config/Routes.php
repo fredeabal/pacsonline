@@ -38,6 +38,7 @@ $routes->post('paciente/(:segment)/logout', [PatientAccessController::class, 'lo
 
 $routes->group('', ['filter' => 'session'], static function ($routes) {
     $routes->get('/', [DashboardController::class, 'index']);
+    $routes->get('dashboard/metrics', [DashboardController::class, 'metrics']);
 
     // Estudios
     $routes->get('studies', [StudyController::class, 'index']);

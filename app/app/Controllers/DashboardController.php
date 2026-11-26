@@ -7,6 +7,7 @@ namespace App\Controllers;
 use App\Libraries\OrthancClient;
 use App\Models\MedicalReportModel;
 use App\Models\StudyModel;
+use CodeIgniter\HTTP\ResponseInterface;
 
 /////////////////////////////////////////////////////////////////////////////////
 // Panel principal (Dashboard) adaptado según el rol del usuario.              //
@@ -17,6 +18,40 @@ class DashboardController extends BaseController
     // Renderiza el dashboard con métricas globales de Orthanc según el rol.   //
     /////////////////////////////////////////////////////////////////////////////
     public function index(): string
+    {
+        return view('dashboard/index', array_merge(
+            ['title' => 'Dashboard | PACS Online'],
+            $this->collectDashboardData()
+        ));
+    }
+
+    /////////////////////////////////////////////////////////////////////////////
+    // Devuelve las métricas del dashboard en JSON para auto-refresco vía fetch.//
+    /////////////////////////////////////////////////////////////////////////////
+    public function metrics(): ResponseInterface
+    {
+        $data = $this->collectDashboardData();
+
+        return $this->response
+            ->setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
+            ->setJSON([
+                'roleMode'      => $data['roleMode'],
+                'orthancAlive'  => $data['orthancAlive'],
+                'orthancStats'  => $data['orthancStats'],
+                'diskStats'     => $data['diskStats'],
+                'totalStudies'  => $data['totalStudies'],
+                'pendingCount'  => $data['pendingCount'],
+                'urgentCount'   => $data['urgentCount'],
+                'reportedCount' => $data['reportedCount'],
+            ]);
+    }
+
+    /**
+     * Recopila métricas de Orthanc, disco y base de datos según el rol actual.
+     *
+     * @return array<string, mixed>
+     */
+    private function collectDashboardData(): array
     {
         $user         = auth()->user();
         $isSupervisor = $user?->can('users.manage') ?? false;
@@ -57,8 +92,7 @@ class DashboardController extends BaseController
             ->where('medical_reports.id IS NULL', null, false)
             ->countAllResults();
 
-        return view('dashboard/index', [
-            'title'         => 'Dashboard | PACS Online',
+        return [
             'roleMode'      => $roleMode,
             'orthancAlive'  => $alive,
             'orthancStats'  => $stats,
@@ -67,6 +101,6 @@ class DashboardController extends BaseController
             'pendingCount'  => $pendingCount,
             'urgentCount'   => $urgentCount,
             'reportedCount' => $reportedCount,
-        ]);
+        ];
     }
 }

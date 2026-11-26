@@ -6,7 +6,6 @@ namespace App\Controllers;
 
 use App\Libraries\OrthancClient;
 use App\Models\MedicalReportModel;
-use App\Models\PatientAccessLinkModel;
 use App\Models\StudyModel;
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -25,11 +24,10 @@ class DashboardController extends BaseController
         $isUsuario    = ! $isSupervisor && ! $isMedico && ($user?->can('studies.share') ?? false);
         $roleMode     = $isSupervisor ? 'admin' : ($isMedico ? 'medico' : ($isUsuario ? 'usuario' : 'observador'));
 
-        $orthanc          = new OrthancClient();
-        $alive            = $orthanc->isAlive();
-        $studyModel       = model(StudyModel::class);
-        $reportModel      = model(MedicalReportModel::class);
-        $patientLinkModel = model(PatientAccessLinkModel::class);
+        $orthanc     = new OrthancClient();
+        $alive       = $orthanc->isAlive();
+        $studyModel  = model(StudyModel::class);
+        $reportModel = model(MedicalReportModel::class);
 
         $stats     = $isSupervisor && $alive ? $orthanc->getStatistics() : [];
         $diskStats = null;
@@ -59,39 +57,6 @@ class DashboardController extends BaseController
             ->where('medical_reports.id IS NULL', null, false)
             ->countAllResults();
 
-        $recentRaw = $alive ? $orthanc->findStudiesPage(0, 5) : [];
-        $uids      = [];
-        foreach ($recentRaw as $study) {
-            $uid = $study['MainDicomTags']['StudyInstanceUID'] ?? '';
-            if ($uid !== '') {
-                $uids[] = $uid;
-            }
-        }
-
-        $recordsByUid      = $studyModel->mapByStudyUids($uids);
-        $reportsByUid      = $reportModel->mapByStudyUids($uids);
-        $patientLinksByUid = $patientLinkModel->countActiveByStudyUids($uids);
-        $recentStudies     = [];
-
-        foreach ($recentRaw as $study) {
-            $uid = $study['MainDicomTags']['StudyInstanceUID'] ?? '';
-            if ($uid === '') {
-                continue;
-            }
-
-            $record = $recordsByUid[$uid] ?? null;
-            $report = $reportsByUid[$uid] ?? null;
-            $status = $report['status'] ?? 'pending';
-
-            $study                          = merge_local_study_metadata($study, $record);
-            $study['_record']               = $record;
-            $study['_report']               = $report;
-            $study['_active_patient_links'] = $patientLinksByUid[$uid] ?? 0;
-            $study['_report_status']        = $status;
-            $study['_priority']             = $record['priority'] ?? 'normal';
-            $recentStudies[]                = $study;
-        }
-
         return view('dashboard/index', [
             'title'         => 'Dashboard | PACS Online',
             'roleMode'      => $roleMode,
@@ -102,7 +67,6 @@ class DashboardController extends BaseController
             'pendingCount'  => $pendingCount,
             'urgentCount'   => $urgentCount,
             'reportedCount' => $reportedCount,
-            'recentStudies' => $recentStudies,
         ]);
     }
 }

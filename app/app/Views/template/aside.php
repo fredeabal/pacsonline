@@ -49,7 +49,7 @@
               </li>
             <?php endif; ?>
 
-            <?php if ($canReview): ?>
+            <?php if ($isMedicoOnly): ?>
               <li class="sidebar-item">
                 <a class="sidebar-link" href="<?= base_url('reports') ?>" aria-expanded="false">
                   <span><i class="ti ti-stethoscope"></i></span>

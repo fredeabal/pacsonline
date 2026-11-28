@@ -52,7 +52,8 @@
         </span>
         <div>
           <span class="text-muted fs-2 d-block">Base de datos</span>
-          <h5 class="fw-bold mb-0 text-body">SQLite3</h5>
+          <?php $dbDriver = db_connect()->DBDriver; ?>
+          <h5 class="fw-bold mb-0 text-body"><?= esc($dbDriver === 'Postgre' ? 'PostgreSQL' : $dbDriver) ?></h5>
         </div>
       </div>
     </div>

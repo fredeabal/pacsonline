@@ -1,4 +1,15 @@
+# =============================================================================
+# Stack Docker Compose — PACS Online
+# Servicios: PostgreSQL (índice Orthanc + BD app), Orthanc (PACS DICOM),
+# OHIF (visor web), PHP-FPM (CodeIgniter 4) y Nginx (reverse proxy interno).
+# =============================================================================
+
 services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16: aloja dos bases de datos separadas en la misma instancia:
+  #   - orthanc  : índice relacional de estudios/series/instancias de Orthanc
+  #   - pacs_app : tablas del portal web CodeIgniter 4 + Shield
+  # ---------------------------------------------------------------------------
   postgres:
     image: postgres:16-alpine
     container_name: pacs-postgres
@@ -8,8 +19,10 @@ services:
       POSTGRES_USER: ${ORTHANC_DB_USER:-orthanc}
       POSTGRES_PASSWORD: ${ORTHANC_DB_PASSWORD:-orthanc_change_me}
     volumes:
+      # Datos persistentes de PostgreSQL (idealmente en el disco de almacenamiento)
       - ./data/postgres:/var/lib/postgresql/data
     healthcheck:
+      # Verifica que Postgres acepte conexiones antes de iniciar Orthanc y PHP
       test: ["CMD-SHELL", "pg_isready -U ${ORTHANC_DB_USER:-orthanc} -d ${ORTHANC_DB_NAME:-orthanc}"]
       interval: 5s
       timeout: 5s
@@ -17,19 +30,26 @@ services:
     networks:
       - pacs-net
 
+  # ---------------------------------------------------------------------------
+  # Orthanc: servidor PACS DICOM (C-STORE / DICOMweb)
+  # - Puerto DICOM (4242) expuesto al host según ORTHANC_DICOM_PORT
+  # - API HTTP (8042) aislada en la red interna pacs-net (nunca expuesta)
+  # ---------------------------------------------------------------------------
   orthanc:
     image: orthancteam/orthanc:latest
     container_name: pacs-orthanc
     restart: unless-stopped
     environment:
+      # Identidad DICOM del servidor PACS
       ORTHANC__NAME: ${ORTHANC_NAME:-PACS_ONLINE}
       ORTHANC__DICOM_AET: ${ORTHANC_AET:-PACSONLINE}
+      # Permite administrar modalidades DICOM dinámicamente desde el portal (/centers)
       ORTHANC__DICOM_MODALITIES_IN_DATABASE: "true"
       # Seguridad DICOM: valida el AET destino (Called AET) y restringe C-STORE a nodos en /centers
       ORTHANC__DICOM_CHECK_CALLED_AET: "true"
       ORTHANC__DICOM_ALWAYS_ALLOW_STORE: "false"
       ORTHANC__DICOM_CHECK_MODALITY_HOST: "false"
-      # Índice en PostgreSQL; archivos DICOM guardados en ./data/orthanc
+      # Índice en PostgreSQL; archivos DICOM binarios guardados en disco (./data/orthanc)
       ORTHANC__POSTGRESQL__ENABLE_INDEX: "true"
       ORTHANC__POSTGRESQL__ENABLE_STORAGE: "false"
       ORTHANC__POSTGRESQL__HOST: "postgres"
@@ -37,15 +57,18 @@ services:
       ORTHANC__POSTGRESQL__DATABASE: ${ORTHANC_DB_NAME:-orthanc}
       ORTHANC__POSTGRESQL__USERNAME: ${ORTHANC_DB_USER:-orthanc}
       ORTHANC__POSTGRESQL__PASSWORD: ${ORTHANC_DB_PASSWORD:-orthanc_change_me}
+      # Plugin DICOMweb (QIDO-RS / WADO-RS / STOW-RS) usado por el visor OHIF
       DICOM_WEB_PLUGIN_ENABLED: "true"
-      # Aislado en la red interna pacs-net (sin puertos HTTP expuestos al host)
+      # Autenticación HTTP interna desactivada: todo el tráfico externo pasa por Nginx + DicomAuthController
       ORTHANC__AUTHENTICATION_ENABLED: "false"
       ORTHANC__DICOM_WEB__ENABLE: "true"
       ORTHANC__DICOM_WEB__ROOT: "/dicom-web/"
       ORTHANC__DICOM_WEB__ENABLE_WADO: "true"
     volumes:
+      # Almacenamiento físico de archivos DICOM (.dcm)
       - ./data/orthanc:/var/lib/orthanc/db
     ports:
+      # Puerto DICOM C-STORE para modalidades locales o túnel VPN
       - "${ORTHANC_DICOM_PORT:-4242}:4242"
     depends_on:
       postgres:
@@ -53,44 +76,73 @@ services:
     networks:
       - pacs-net
 
+  # ---------------------------------------------------------------------------
+  # OHIF Viewer: visor médico web (Cornerstone3D) servido bajo /viewer/
+  # ---------------------------------------------------------------------------
   ohif:
     image: ohif/app:latest
     container_name: pacs-ohif
     restart: unless-stopped
     volumes:
+      # Configuración personalizada de fuentes DICOMweb apuntando a /dicom-web/
       - ./docker/ohif/app-config.js:/usr/share/nginx/html/app-config.js:ro
     depends_on:
       - orthanc
     networks:
       - pacs-net
 
+  # ---------------------------------------------------------------------------
+  # PHP-FPM 8.3: backend del portal web CodeIgniter 4 + Shield
+  # ---------------------------------------------------------------------------
   php:
     build:
       context: ./docker/php
     container_name: pacs-php
     restart: unless-stopped
     environment:
-      CI_ENVIRONMENT: ${CI_ENVIRONMENT:-development}
+      # Entorno de CodeIgniter 4 (production desactiva Debugbar y trazas detalladas)
+      CI_ENVIRONMENT: ${CI_ENVIRONMENT:-production}
+      # Conexión interna hacia Orthanc y metadatos DICOM mostrados en Configuración
       ORTHANC_URL: ${ORTHANC_URL:-http://orthanc:8042}
       ORTHANC_AET: ${ORTHANC_AET:-PACSONLINE}
       ORTHANC_DICOM_PORT: ${ORTHANC_DICOM_PORT:-4242}
+      # Base de datos de la aplicación (PostgreSQL por defecto en BD separada pacs_app)
+      APP_DB_DRIVER: ${APP_DB_DRIVER:-Postgre}
+      APP_DB_HOST: ${APP_DB_HOST:-postgres}
+      APP_DB_PORT: ${APP_DB_PORT:-5432}
+      APP_DB_NAME: ${APP_DB_NAME:-pacs_app}
+      APP_DB_USER: ${APP_DB_USER:-${ORTHANC_DB_USER:-orthanc}}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:-${ORTHANC_DB_PASSWORD:-orthanc_change_me}}
     volumes:
+      # Código fuente de CodeIgniter 4 y carpeta writable/
       - ./app:/var/www/html
+      # Datos auxiliares persistentes de la aplicación
       - ./data/app:/var/www/data
+      # Montaje solo lectura del volumen DICOM para calcular espacio libre y alertas de disco
       - ./data/orthanc:/var/www/orthanc-storage:ro
     depends_on:
-      - orthanc
+      postgres:
+        condition: service_healthy
+      orthanc:
+        condition: service_started
     networks:
       - pacs-net
 
+  # ---------------------------------------------------------------------------
+  # Nginx: punto de entrada HTTP interno (detrás de un reverse proxy con TLS)
+  # Enruta / -> PHP, /viewer/ -> OHIF y /dicom-web/ -> Orthanc (con auth_request)
+  # ---------------------------------------------------------------------------
   nginx:
     image: nginx:alpine
     container_name: pacs-nginx
     restart: unless-stopped
     ports:
+      # Puerto HTTP expuesto hacia el reverse proxy externo (ej. 8080)
       - "${APP_PORT:-8080}:80"
     volumes:
+      # Archivos estáticos del portal en modo solo lectura
       - ./app:/var/www/html:ro
+      # Reglas de enrutamiento y subpetición de autorización DICOM (/auth/dicom)
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - php
@@ -99,6 +151,7 @@ services:
     networks:
       - pacs-net
 
+# Red bridge aislada para comunicación interna entre contenedores del stack
 networks:
   pacs-net:
     driver: bridge

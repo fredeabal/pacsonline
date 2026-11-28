@@ -1,9 +1,10 @@
 FROM php:8.3-fpm-alpine
 
-# Dependencias del sistema necesarias para CodeIgniter 4, SQLite y manejo de ZIP/DICOM
+# Dependencias del sistema necesarias para CodeIgniter 4, SQLite, PostgreSQL y manejo de ZIP/DICOM
 RUN apk add --no-cache \
     sqlite \
     sqlite-dev \
+    postgresql-dev \
     icu-dev \
     libzip-dev \
     libpng-dev \
@@ -18,6 +19,8 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j$(nproc) \
         pdo \
         pdo_sqlite \
+        pgsql \
+        pdo_pgsql \
         intl \
         zip \
         gd \

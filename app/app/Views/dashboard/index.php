@@ -56,6 +56,18 @@
   </div>
 </div>
 
+<div id="dashboardAlerts" class="<?= empty($alerts) ? 'd-none' : 'mb-3' ?>">
+  <?php foreach (($alerts ?? []) as $alert): ?>
+    <div class="alert alert-<?= esc($alert['level'] ?? 'warning') ?> d-flex align-items-center gap-2 mb-2 border-0 shadow-sm" role="alert">
+      <i class="ti <?= esc($alert['icon'] ?? 'ti-alert-triangle') ?> fs-5 flex-shrink-0"></i>
+      <div>
+        <strong class="me-1"><?= esc($alert['title'] ?? '') ?>:</strong>
+        <span><?= esc($alert['message'] ?? '') ?></span>
+      </div>
+    </div>
+  <?php endforeach; ?>
+</div>
+
 <div class="row g-3 mb-4">
   <?php if ($roleMode === 'observador'): ?>
     <div class="col-md-6">
@@ -325,6 +337,39 @@
       text.textContent = alive ? 'Conectado' : 'Sin conexión';
       text.classList.toggle('text-success', alive);
       text.classList.toggle('text-danger', !alive);
+    }
+
+    const alertsBox = document.getElementById('dashboardAlerts');
+    if (alertsBox && Array.isArray(data.alerts)) {
+      alertsBox.replaceChildren();
+      if (data.alerts.length === 0) {
+        alertsBox.classList.add('d-none');
+        alertsBox.classList.remove('mb-3');
+      } else {
+        alertsBox.classList.remove('d-none');
+        alertsBox.classList.add('mb-3');
+        data.alerts.forEach(function (a) {
+          const level = a.level === 'danger' ? 'danger' : 'warning';
+          const wrap = document.createElement('div');
+          wrap.className = 'alert alert-' + level + ' d-flex align-items-center gap-2 mb-2 border-0 shadow-sm';
+          wrap.setAttribute('role', 'alert');
+
+          const ic = document.createElement('i');
+          ic.className = 'ti ' + (a.icon || 'ti-alert-triangle') + ' fs-5 flex-shrink-0';
+          const body = document.createElement('div');
+          const strong = document.createElement('strong');
+          strong.className = 'me-1';
+          strong.textContent = (a.title || '') + ':';
+          const span = document.createElement('span');
+          span.textContent = a.message || '';
+
+          body.appendChild(strong);
+          body.appendChild(span);
+          wrap.appendChild(ic);
+          wrap.appendChild(body);
+          alertsBox.appendChild(wrap);
+        });
+      }
     }
   }
 

@@ -251,7 +251,7 @@ class CenterController extends BaseController
     }
 
     /////////////////////////////////////////////////////////////////////////////
-    // Elimina el centro de SQLite y su modalidad asociada en Orthanc.         //
+    // Elimina el centro de la base de datos y su modalidad asociada en Orthanc. //
     /////////////////////////////////////////////////////////////////////////////
     public function delete(int $id): RedirectResponse
     {

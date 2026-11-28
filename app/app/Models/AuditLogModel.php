@@ -208,7 +208,6 @@ class AuditLogModel extends Model
             'report.pdf_downloaded'             => 'PDF descargado',
             'report.deleted'                    => 'Informe eliminado',
             'settings.smtp_updated'             => 'SMTP guardado',
-            'settings.backup_downloaded'        => 'Backup SQLite',
             'settings.temp_cleared'             => 'Limpieza temporal',
             'center.created'                    => 'Centro creado',
             'center.updated'                    => 'Centro editado',

@@ -39,6 +39,7 @@ class DashboardController extends BaseController
                 'orthancAlive'  => $data['orthancAlive'],
                 'orthancStats'  => $data['orthancStats'],
                 'diskStats'     => $data['diskStats'],
+                'alerts'        => $data['alerts'],
                 'totalStudies'  => $data['totalStudies'],
                 'pendingCount'  => $data['pendingCount'],
                 'urgentCount'   => $data['urgentCount'],
@@ -92,11 +93,47 @@ class DashboardController extends BaseController
             ->where('medical_reports.id IS NULL', null, false)
             ->countAllResults();
 
+        $alerts = [];
+        if (! $alive) {
+            $alerts[] = [
+                'level'   => 'danger',
+                'icon'    => 'ti-server-off',
+                'title'   => 'Servidor PACS sin conexión',
+                'message' => 'No se pudo conectar con Orthanc. Verifica el estado del servicio PACS.',
+            ];
+        }
+        if ($isSupervisor && $diskStats !== null) {
+            $warnPct = (float) env('DISK_ALERT_WARN_PCT', 80);
+            $critPct = (float) env('DISK_ALERT_CRIT_PCT', 90);
+            $usedPct = (float) $diskStats['used_pct'];
+            $freeGb  = $diskStats['free_bytes'] / (1024 ** 3);
+            $freeFmt = $freeGb >= 1024
+                ? number_format($freeGb / 1024, 2, ',', '.') . ' TB'
+                : number_format($freeGb, 1, ',', '.') . ' GB';
+
+            if ($usedPct >= $critPct) {
+                $alerts[] = [
+                    'level'   => 'danger',
+                    'icon'    => 'ti-alert-octagon',
+                    'title'   => 'Almacenamiento crítico (' . number_format($usedPct, 1, ',', '.') . '%)',
+                    'message' => "Quedan solo {$freeFmt} libres en el volumen DICOM. Amplía espacio o libera estudios antiguos.",
+                ];
+            } elseif ($usedPct >= $warnPct) {
+                $alerts[] = [
+                    'level'   => 'warning',
+                    'icon'    => 'ti-alert-triangle',
+                    'title'   => 'Almacenamiento elevado (' . number_format($usedPct, 1, ',', '.') . '%)',
+                    'message' => "Quedan {$freeFmt} libres en el volumen DICOM.",
+                ];
+            }
+        }
+
         return [
             'roleMode'      => $roleMode,
             'orthancAlive'  => $alive,
             'orthancStats'  => $stats,
             'diskStats'     => $diskStats,
+            'alerts'        => $alerts,
             'totalStudies'  => $totalStudies,
             'pendingCount'  => $pendingCount,
             'urgentCount'   => $urgentCount,

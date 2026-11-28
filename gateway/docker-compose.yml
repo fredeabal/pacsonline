@@ -1,18 +1,31 @@
+# =============================================================================
+# Docker Compose — Gateway DICOM para Clínica / Centro Remitente
+# Paquete independiente para instalar en la red local de una clínica externa.
+# Recibe estudios por C-STORE desde equipos médicos y los reenvía por HTTPS
+# al servidor central PACS Online usando forwarder.lua y un Bearer Token.
+# =============================================================================
+
 services:
   orthanc-gateway:
     image: orthancteam/orthanc:latest
     container_name: pacs-clinic-gateway
     restart: unless-stopped
     ports:
-      # Puerto DICOM local para que ecógrafos, RX, TAC o RM envíen por C-STORE
+      # Puerto DICOM local (C-STORE) al que apuntan ecógrafos, RX, TAC o RM de la clínica
       - "4242:4242"
     environment:
+      # Nombre descriptivo y AE Title local con el que se identifica este gateway
       ORTHANC__NAME: "GATEWAY_CLINICA"
       ORTHANC__DICOM_AET: "${CLINIC_AET:-GATEWAY_CLINICA}"
       ORTHANC__DICOM_PORT: "4242"
+      # Carga automática del script Lua que reenvía cada instancia recibida por HTTPS
       ORTHANC__LUA_SCRIPTS: '["/etc/orthanc/forwarder.lua"]'
+      # URL del endpoint de ingesta del PACS central (ej. https://tu-pacs/api/ingest/dicom)
       PACS_INGEST_URL: "${PACS_INGEST_URL}"
+      # Token Bearer del centro médico generado en el panel /centers del PACS central
       PACS_CENTER_TOKEN: "${PACS_CENTER_TOKEN}"
     volumes:
+      # Script Lua de reenvío en modo solo lectura
       - ./forwarder.lua:/etc/orthanc/forwarder.lua:ro
+      # Buffer local temporal: guarda estudios pendientes si se cae la conexión a internet
       - ./buffer:/var/lib/orthanc/db

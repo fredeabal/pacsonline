@@ -25,7 +25,7 @@
             <select name="status" class="form-select worklist-filter-select" aria-label="Filtrar por estado">
               <option value="all" <?= $filter === 'all' ? 'selected' : '' ?>>Estado: Todos</option>
               <option value="pending" <?= $filter === 'pending' ? 'selected' : '' ?>>Estado: Pendientes</option>
-              <option value="in_review" <?= $filter === 'in_review' ? 'selected' : '' ?>>Estado: En revisión</option>
+              <option value="in_review" <?= $filter === 'in_review' ? 'selected' : '' ?>>Estado: Borradores</option>
               <option value="reported" <?= $filter === 'reported' ? 'selected' : '' ?>>Estado: Informados</option>
             </select>
           </div>
@@ -158,9 +158,16 @@
                     <i class="ti ti-dots-vertical fs-6"></i>
                   </button>
                   <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                    <?php if (in_array($status, ['reported', 'in_review'], true)): ?>
+                      <li>
+                        <a class="dropdown-item d-flex align-items-center gap-2" href="<?= base_url('reports/pdf/' . urlencode($uid)) ?>" target="_blank">
+                          <i class="ti ti-file-text fs-5"></i> <?= $status === 'reported' ? 'Ver Informe PDF' : 'Ver Borrador PDF' ?>
+                        </a>
+                      </li>
+                    <?php endif; ?>
                     <li>
                       <a class="dropdown-item d-flex align-items-center gap-2" href="<?= base_url('reports/edit/' . urlencode($uid)) ?>">
-                        <i class="ti ti-stethoscope fs-5"></i> <?= $status === 'reported' ? 'Editar informe' : 'Informar estudio' ?>
+                        <i class="ti ti-stethoscope fs-5"></i> <?= $status === 'reported' ? 'Editar informe' : ($status === 'in_review' ? 'Editar borrador' : 'Informar estudio') ?>
                       </a>
                     </li>
                     <li>
@@ -173,13 +180,6 @@
                         <i class="ti ti-paperclip fs-5"></i> Ficha y adjuntos
                       </a>
                     </li>
-                    <?php if ($status === 'reported'): ?>
-                      <li>
-                        <a class="dropdown-item d-flex align-items-center gap-2" href="<?= base_url('reports/pdf/' . urlencode($uid)) ?>" target="_blank">
-                          <i class="ti ti-file-type-pdf fs-5"></i> Ver Informe PDF
-                        </a>
-                      </li>
-                    <?php endif; ?>
                   </ul>
                 </div>
               </td>
@@ -223,9 +223,16 @@
                     <i class="ti ti-dots-vertical fs-6"></i>
                   </button>
                 <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                  <?php if (in_array($status, ['reported', 'in_review'], true)): ?>
+                    <li>
+                      <a class="dropdown-item d-flex align-items-center gap-2" href="<?= base_url('reports/pdf/' . urlencode($uid)) ?>" target="_blank">
+                        <i class="ti ti-file-text fs-5"></i> <?= $status === 'reported' ? 'Ver Informe PDF' : 'Ver Borrador PDF' ?>
+                      </a>
+                    </li>
+                  <?php endif; ?>
                   <li>
                     <a class="dropdown-item d-flex align-items-center gap-2" href="<?= base_url('reports/edit/' . urlencode($uid)) ?>">
-                      <i class="ti ti-stethoscope fs-5"></i> <?= $status === 'reported' ? 'Editar informe' : 'Informar estudio' ?>
+                      <i class="ti ti-stethoscope fs-5"></i> <?= $status === 'reported' ? 'Editar informe' : ($status === 'in_review' ? 'Editar borrador' : 'Informar estudio') ?>
                     </a>
                   </li>
                   <li>
@@ -238,13 +245,6 @@
                       <i class="ti ti-paperclip fs-5"></i> Ficha y adjuntos
                     </a>
                   </li>
-                  <?php if ($status === 'reported'): ?>
-                    <li>
-                      <a class="dropdown-item d-flex align-items-center gap-2" href="<?= base_url('reports/pdf/' . urlencode($uid)) ?>" target="_blank">
-                        <i class="ti ti-file-type-pdf fs-5"></i> Ver Informe PDF
-                      </a>
-                    </li>
-                  <?php endif; ?>
                 </ul>
               </div>
             </div>

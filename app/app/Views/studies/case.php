@@ -26,7 +26,7 @@
     <div class="d-flex flex-wrap gap-2">
       <?php if ($currentUser?->can('studies.edit_dicom')): ?>
         <a href="<?= base_url('studies/case/' . urlencode($studyUid) . '/dicom') ?>" class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1">
-          <i class="ti ti-edit"></i> <span class="d-none d-sm-inline">Editar datos DICOM</span>
+          <i class="ti ti-edit"></i> <span class="d-none d-sm-inline">Editar DICOM</span>
         </a>
       <?php endif; ?>
       <?php if ($currentUser?->can('reports.review') && (empty($report) || ($report['status'] ?? '') !== 'reported')): ?>
@@ -278,6 +278,12 @@
               </td>
             </tr>
             <?php endif; ?>
+            <?php
+              $canImportToReport = $currentUser !== null
+                  && $currentUser->can('reports.review')
+                  && user_can_modify_report($currentUser, $report ?? null, $study ?? null);
+              $hasExistingReport = ! empty($report);
+            ?>
             <?php foreach ($dicomDocsList as $doc):
               $docUrl = base_url('studies/dicom-doc/' . urlencode($studyUid) . '/' . urlencode((string) $doc['instance_id']));
             ?>
@@ -301,6 +307,18 @@
                         <i class="ti ti-eye fs-5"></i> Ver / Descargar PDF
                       </a>
                     </li>
+                    <?php if ($canImportToReport): ?>
+                      <li>
+                        <form action="<?= base_url('reports/import-pdf/' . urlencode($studyUid)) ?>" method="post" class="import-pdf-form" data-has-report="<?= $hasExistingReport ? '1' : '0' ?>">
+                          <?= csrf_field() ?>
+                          <input type="hidden" name="source" value="dicom">
+                          <input type="hidden" name="instance_id" value="<?= esc((string) $doc['instance_id'], 'attr') ?>">
+                          <button type="submit" class="dropdown-item d-flex align-items-center gap-2 text-primary">
+                            <i class="ti ti-file-import fs-5"></i> Importar al informe
+                          </button>
+                        </form>
+                      </li>
+                    <?php endif; ?>
                   </ul>
                 </div>
               </td>
@@ -332,6 +350,18 @@
                         <i class="ti ti-eye fs-5"></i> Ver / Descargar
                       </a>
                     </li>
+                    <?php if ($canImportToReport && $attExt === 'PDF'): ?>
+                      <li>
+                        <form action="<?= base_url('reports/import-pdf/' . urlencode($studyUid)) ?>" method="post" class="import-pdf-form" data-has-report="<?= $hasExistingReport ? '1' : '0' ?>">
+                          <?= csrf_field() ?>
+                          <input type="hidden" name="source" value="attachment">
+                          <input type="hidden" name="attachment_id" value="<?= (int) $att['id'] ?>">
+                          <button type="submit" class="dropdown-item d-flex align-items-center gap-2 text-primary">
+                            <i class="ti ti-file-import fs-5"></i> Importar al informe
+                          </button>
+                        </form>
+                      </li>
+                    <?php endif; ?>
                     <?php if ($currentUser?->can('studies.delete') || ($currentUser?->can('reports.review') && (int) ($att['uploaded_by_user_id'] ?? 0) === (int) auth()->id())): ?>
                       <li><hr class="dropdown-divider"></li>
                       <li>
@@ -417,6 +447,36 @@
 
 <?= $this->section('scripts') ?>
 <script {csp-script-nonce}>
+  document.querySelectorAll('.import-pdf-form').forEach(function(form) {
+    form.addEventListener('submit', function(e) {
+      if (form.dataset.hasReport !== '1') {
+        return;
+      }
+      e.preventDefault();
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({
+          icon: 'warning',
+          title: '¿Reemplazar contenido del informe?',
+          text: 'Ya existe un informe para este estudio. Al importar este PDF se reemplazará su contenido.',
+          showCancelButton: true,
+          confirmButtonText: 'Sí, importar',
+          cancelButtonText: 'Cancelar',
+          customClass: {
+            confirmButton: 'btn btn-primary me-2',
+            cancelButton: 'btn btn-dark'
+          },
+          buttonsStyling: false
+        }).then(function(result) {
+          if (result.isConfirmed) {
+            form.submit();
+          }
+        });
+      } else if (confirm('Ya existe un informe para este estudio. ¿Reemplazar su contenido con este PDF?')) {
+        form.submit();
+      }
+    });
+  });
+
   document.querySelectorAll('.delete-attachment-form').forEach(function(form) {
     form.addEventListener('submit', function(e) {
       e.preventDefault();

@@ -54,7 +54,8 @@ class AuthGroups extends ShieldAuthGroups
         'studies.attachments' => 'Puede subir documentos adjuntos a los casos',
         'studies.edit_dicom'  => 'Puede modificar etiquetas DICOM en Orthanc',
         'studies.delete'      => 'Puede eliminar estudios, adjuntos y enlaces revocados',
-        'reports.review'      => 'Puede revisar estudios, emitir informes médicos y gestionar plantillas',
+        'reports.review'      => 'Puede revisar estudios, redactar borradores y gestionar plantillas',
+        'reports.sign'        => 'Puede firmar y publicar informes médicos',
         'reports.view_own'    => 'Puede ver y descargar informes médicos',
         'users.manage'        => 'Puede gestionar usuarios y roles',
         'audit.view'          => 'Puede consultar registros de auditoría',
@@ -64,7 +65,8 @@ class AuthGroups extends ShieldAuthGroups
     public array $matrix = [
         'admin' => [
             'studies.*',
-            'reports.*',
+            'reports.review',
+            'reports.view_own',
             'users.*',
             'audit.*',
             'settings.*',
@@ -75,6 +77,7 @@ class AuthGroups extends ShieldAuthGroups
             'studies.share',
             'studies.attachments',
             'reports.review',
+            'reports.sign',
             'reports.view_own',
         ],
         'usuario' => [

@@ -16,9 +16,9 @@
   </div>
 </div>
 
-<ul class="nav nav-tabs mb-4" id="settingsTabs" role="tablist">
-  <li class="nav-item" role="presentation">
-    <button class="nav-link <?= $currentTab === 'pacs' ? 'active' : '' ?>"
+<ul class="nav nav-tabs flex-nowrap overflow-x-auto overflow-y-hidden mb-4" id="settingsTabs" role="tablist">
+  <li class="nav-item flex-shrink-0" role="presentation">
+    <button class="nav-link text-nowrap <?= $currentTab === 'pacs' ? 'active' : '' ?>"
             id="tab-pacs-btn"
             data-bs-toggle="tab"
             data-bs-target="#tab-pacs"
@@ -27,8 +27,8 @@
       <i class="ti ti-scan me-1"></i> Servidor PACS
     </button>
   </li>
-  <li class="nav-item" role="presentation">
-    <button class="nav-link <?= $currentTab === 'smtp' ? 'active' : '' ?>"
+  <li class="nav-item flex-shrink-0" role="presentation">
+    <button class="nav-link text-nowrap <?= $currentTab === 'smtp' ? 'active' : '' ?>"
             id="tab-smtp-btn"
             data-bs-toggle="tab"
             data-bs-target="#tab-smtp"
@@ -37,8 +37,18 @@
       <i class="ti ti-mail-fast me-1"></i> Servidor SMTP
     </button>
   </li>
-  <li class="nav-item" role="presentation">
-    <button class="nav-link <?= $currentTab === 'audit' ? 'active' : '' ?>"
+  <li class="nav-item flex-shrink-0" role="presentation">
+    <button class="nav-link text-nowrap <?= $currentTab === 'ai' ? 'active' : '' ?>"
+            id="tab-ai-btn"
+            data-bs-toggle="tab"
+            data-bs-target="#tab-ai"
+            type="button"
+            role="tab">
+      <i class="ti ti-robot me-1"></i> Asistente IA
+    </button>
+  </li>
+  <li class="nav-item flex-shrink-0" role="presentation">
+    <button class="nav-link text-nowrap <?= $currentTab === 'audit' ? 'active' : '' ?>"
             id="tab-audit-btn"
             data-bs-toggle="tab"
             data-bs-target="#tab-audit"
@@ -47,8 +57,8 @@
       <i class="ti ti-history me-1"></i> Auditoría
     </button>
   </li>
-  <li class="nav-item" role="presentation">
-    <button class="nav-link <?= $currentTab === 'maintenance' ? 'active' : '' ?>"
+  <li class="nav-item flex-shrink-0" role="presentation">
+    <button class="nav-link text-nowrap <?= $currentTab === 'maintenance' ? 'active' : '' ?>"
             id="tab-maintenance-btn"
             data-bs-toggle="tab"
             data-bs-target="#tab-maintenance"
@@ -65,6 +75,9 @@
   </div>
   <div class="tab-pane fade <?= $currentTab === 'smtp' ? 'show active' : '' ?>" id="tab-smtp" role="tabpanel">
     <?= view('settings/_smtp', get_defined_vars()) ?>
+  </div>
+  <div class="tab-pane fade <?= $currentTab === 'ai' ? 'show active' : '' ?>" id="tab-ai" role="tabpanel">
+    <?= view('settings/_ai', get_defined_vars()) ?>
   </div>
   <div class="tab-pane fade <?= $currentTab === 'audit' ? 'show active' : '' ?>" id="tab-audit" role="tabpanel">
     <?= view('settings/_audit', get_defined_vars()) ?>

@@ -61,8 +61,17 @@ class ReportPdfService
             }
         }
 
-        $doctor = ! empty($report['doctor_user_id'])
-            ? auth()->getProvider()->findById((int) $report['doctor_user_id'])
+        $isPublished    = ($report['status'] ?? '') === 'reported';
+        $usersProvider  = auth()->getProvider();
+        $doctor         = ($isPublished && ! empty($report['doctor_user_id']))
+            ? $usersProvider->findById((int) $report['doctor_user_id'])
+            : null;
+        $assignedDoctor = (! $isPublished && ! empty($study['assigned_doctor_id']))
+            ? $usersProvider->findById((int) $study['assigned_doctor_id'])
+            : null;
+        $transcriberId  = (int) ($report['updated_by_user_id'] ?? ($report['created_by_user_id'] ?? 0));
+        $transcriber    = (! $isPublished && $transcriberId > 0 && ($assignedDoctor === null || (int) $assignedDoctor->id !== $transcriberId))
+            ? $usersProvider->findById($transcriberId)
             : null;
 
         $activeLink = model(PatientAccessLinkModel::class)
@@ -77,8 +86,9 @@ class ReportPdfService
             $qrDataUri = self::generateQrDataUri(base_url('paciente/' . $activeLink['token']));
         }
 
+        // Nunca estampar la imagen de firma en un borrador sin publicar.
         $signatureDataUri = null;
-        if ($doctor !== null && ! empty($doctor->signature_file)) {
+        if ($isPublished && $doctor !== null && ! empty($doctor->signature_file)) {
             $sigPath = WRITEPATH . 'uploads/signatures/' . basename((string) $doctor->signature_file);
             if (is_file($sigPath)) {
                 $mime = mime_content_type($sigPath) ?: 'image/png';
@@ -103,6 +113,8 @@ class ReportPdfService
             'study'               => $study,
             'report'              => $report,
             'doctor'              => $doctor,
+            'assignedDoctor'      => $assignedDoctor,
+            'transcriber'         => $transcriber,
             'qrDataUri'           => $qrDataUri,
             'signatureDataUri'    => $signatureDataUri,
             'pacslineLogoDataUri' => $pacslineLogoDataUri,

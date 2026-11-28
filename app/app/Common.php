@@ -512,3 +512,50 @@ if (! function_exists('render_report_html')) {
         return nl2br(esc($raw));
     }
 }
+
+if (! function_exists('user_can_sign_report')) {
+    /**
+     * Comprueba si el usuario tiene rol médico para firmar/publicar el informe de este estudio.
+     * Si el estudio tiene un médico asignado, solo ese médico puede firmarlo.
+     *
+     * @param array<string, mixed>|null $study
+     */
+    function user_can_sign_report(?object $user, ?array $study = null): bool
+    {
+        if ($user === null || ! method_exists($user, 'can') || ! method_exists($user, 'inGroup')) {
+            return false;
+        }
+
+        if (! $user->can('reports.sign') || ! $user->inGroup('medico')) {
+            return false;
+        }
+
+        if ($study !== null && ! empty($study['assigned_doctor_id'])) {
+            return (int) $study['assigned_doctor_id'] === (int) $user->id;
+        }
+
+        return true;
+    }
+}
+
+if (! function_exists('user_can_modify_report')) {
+    /**
+     * Comprueba si el usuario puede editar el informe (un informe ya firmado solo puede editarlo el médico firmante).
+     *
+     * @param array<string, mixed>|null $report
+     * @param array<string, mixed>|null $study
+     */
+    function user_can_modify_report(?object $user, ?array $report, ?array $study = null): bool
+    {
+        if ($user === null || ! method_exists($user, 'can') || ! $user->can('reports.review')) {
+            return false;
+        }
+
+        if ($report !== null && ($report['status'] ?? '') === 'reported') {
+            return user_can_sign_report($user, $study)
+                && (int) ($report['doctor_user_id'] ?? 0) === (int) $user->id;
+        }
+
+        return true;
+    }
+}

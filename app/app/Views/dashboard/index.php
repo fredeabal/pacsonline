@@ -25,6 +25,9 @@
             <a href="<?= base_url('reports') ?>" class="btn btn-sm btn-primary">
               <i class="ti ti-stethoscope me-1"></i> Ir al Worklist
             </a>
+            <a href="<?= base_url('reports?status=in_review') ?>" class="btn btn-sm btn-outline-primary">
+              <i class="ti ti-file-pencil me-1"></i> Borradores
+            </a>
             <a href="<?= base_url('templates') ?>" class="btn btn-sm btn-outline-primary">
               <i class="ti ti-template me-1"></i> Mis Plantillas
             </a>
@@ -45,6 +48,9 @@
             </a>
             <a href="<?= base_url('reports') ?>" class="btn btn-sm btn-outline-primary">
               <i class="ti ti-stethoscope me-1"></i> Informar
+            </a>
+            <a href="<?= base_url('reports?status=in_review') ?>" class="btn btn-sm btn-outline-primary">
+              <i class="ti ti-file-pencil me-1"></i> Borradores
             </a>
             <a href="<?= base_url('studies') ?>" class="btn btn-sm btn-outline-primary">
               <i class="ti ti-report-medical me-1"></i> Ver Estudios

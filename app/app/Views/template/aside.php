@@ -40,6 +40,15 @@
               </li>
             <?php endif; ?>
 
+            <?php if ($canReview || $isSupervisor): ?>
+              <li class="sidebar-item">
+                <a class="sidebar-link" href="<?= base_url('reports?status=in_review') ?>" aria-expanded="false">
+                  <span><i class="ti ti-file-pencil"></i></span>
+                  <span class="hide-menu">Borradores</span>
+                </a>
+              </li>
+            <?php endif; ?>
+
             <?php if ($canUpload): ?>
               <li class="sidebar-item">
                 <a class="sidebar-link" href="<?= base_url('studies/upload') ?>" aria-expanded="false">

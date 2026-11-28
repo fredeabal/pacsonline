@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Libraries\AiAssistantService;
 use App\Libraries\NotificationService;
 use App\Libraries\OrthancClient;
 use App\Models\AuditLogModel;
 use CodeIgniter\HTTP\RedirectResponse;
+use CodeIgniter\HTTP\ResponseInterface;
 
 /////////////////////////////////////////////////////////////////////////////////
 // Configuración general de la plataforma, correo/SMTP y estado de Orthanc.    //
@@ -26,7 +28,7 @@ class SettingController extends BaseController
         $settings   = service('settings');
         $orthanc    = new OrthancClient();
         $currentTab = (string) ($this->request->getGet('tab') ?? 'pacs');
-        if (! in_array($currentTab, ['pacs', 'smtp', 'audit', 'maintenance'], true)) {
+        if (! in_array($currentTab, ['pacs', 'smtp', 'ai', 'audit', 'maintenance'], true)) {
             $currentTab = 'pacs';
         }
 
@@ -57,6 +59,8 @@ class SettingController extends BaseController
             'logs'              => $auditData['logs'],
             'auditData'         => $auditData,
             'auditFilters'      => $auditFilters,
+            'ai'                => (new AiAssistantService())->getConfig(),
+            'aiPresets'         => AiAssistantService::cloudPresets(),
             'smtp'         => [
                 'enabled'   => (bool) $settings->get('Smtp.enabled'),
                 'host'      => (string) ($settings->get('Smtp.host') ?? ''),
@@ -160,6 +164,109 @@ class SettingController extends BaseController
         }
 
         return redirect()->to('/settings?tab=smtp')->with('error', 'Error al enviar correo. Revisa el SMTP.');
+    }
+
+    /////////////////////////////////////////////////////////////////////////////
+    // Guarda la configuración del asistente de IA (Cloud API u Ollama local). //
+    /////////////////////////////////////////////////////////////////////////////
+    public function saveAi(): RedirectResponse
+    {
+        if (! auth()->user()?->can('settings.manage')) {
+            return redirect()->to('/')->with('error', 'Sin permiso.');
+        }
+
+        $provider = (string) ($this->request->getPost('provider') ?? 'cloud');
+        if (! in_array($provider, ['cloud', 'ollama'], true)) {
+            $provider = 'cloud';
+        }
+
+        $rules = [
+            'provider'     => ['label' => 'Modo de IA', 'rules' => 'required|in_list[cloud,ollama]'],
+            'cloud_preset' => ['label' => 'Proveedor Cloud', 'rules' => 'permit_empty|in_list[gemini,openai,groq,custom]'],
+            'cloud_url'    => ['label' => 'URL API Cloud', 'rules' => ($provider === 'cloud' ? 'required|' : 'permit_empty|') . 'valid_url_strict|max_length[255]'],
+            'cloud_model'  => ['label' => 'Modelo Cloud', 'rules' => ($provider === 'cloud' ? 'required|' : 'permit_empty|') . 'max_length[120]'],
+            'cloud_key'    => ['label' => 'API Key', 'rules' => 'permit_empty|max_length[255]'],
+            'ollama_url'   => ['label' => 'URL de Ollama', 'rules' => ($provider === 'ollama' ? 'required|' : 'permit_empty|') . 'valid_url_strict|max_length[255]'],
+            'ollama_model' => ['label' => 'Modelo de Ollama', 'rules' => ($provider === 'ollama' ? 'required|' : 'permit_empty|') . 'max_length[120]'],
+        ];
+
+        if (! $this->validateData($this->request->getPost(), $rules)) {
+            return redirect()->to('/settings?tab=ai')->withInput()->with('errors', $this->validator->getErrors());
+        }
+
+        $data     = $this->validator->getValidated();
+        $settings = service('settings');
+
+        $settings->set('Ai.enabled', (bool) $this->request->getPost('enabled'));
+        $settings->set('Ai.provider', $data['provider']);
+        $settings->set('Ai.cloudPreset', (string) ($data['cloud_preset'] ?: 'gemini'));
+        $settings->set('Ai.cloudUrl', rtrim((string) $data['cloud_url'], '/'));
+        $settings->set('Ai.cloudModel', trim((string) $data['cloud_model']));
+        if (! empty($data['cloud_key'])) {
+            $settings->set('Ai.cloudApiKey', trim((string) $data['cloud_key']));
+        }
+        $settings->set('Ai.ollamaUrl', rtrim((string) $data['ollama_url'], '/'));
+        $settings->set('Ai.ollamaModel', trim((string) $data['ollama_model']));
+
+        AuditLogModel::record('settings.ai_updated', null, null, 'Configuración de Asistente IA actualizada (' . $data['provider'] . ')', $this->request);
+
+        return redirect()->to('/settings?tab=ai')->with('message', 'Configuración de Asistente IA guardada.');
+    }
+
+    /////////////////////////////////////////////////////////////////////////////
+    // Prueba la conexión con el proveedor de IA configurado.                  //
+    /////////////////////////////////////////////////////////////////////////////
+    public function testAi(): RedirectResponse
+    {
+        if (! auth()->user()?->can('settings.manage')) {
+            return redirect()->to('/')->with('error', 'Sin permiso.');
+        }
+
+        @set_time_limit(130);
+        $res = (new AiAssistantService())->testConnection();
+
+        if ($res['ok']) {
+            return redirect()->to('/settings?tab=ai')->with('message', $res['message']);
+        }
+
+        return redirect()->to('/settings?tab=ai')->with('error', $res['message']);
+    }
+
+    /////////////////////////////////////////////////////////////////////////////
+    // Devuelve en JSON los modelos instalados en la URL de Ollama indicada.   //
+    /////////////////////////////////////////////////////////////////////////////
+    public function ollamaModels(): ResponseInterface
+    {
+        if (! auth()->user()?->can('settings.manage')) {
+            return $this->response->setStatusCode(403)->setJSON(['ok' => false, 'models' => [], 'error' => 'Sin permiso.']);
+        }
+
+        $url = (string) ($this->request->getGet('url') ?? '');
+        $res = (new AiAssistantService())->listOllamaModels($url);
+
+        return $this->response->setJSON($res);
+    }
+
+    /////////////////////////////////////////////////////////////////////////////
+    // Devuelve en JSON los modelos disponibles en la API Cloud configurada.   //
+    /////////////////////////////////////////////////////////////////////////////
+    public function cloudModels(): ResponseInterface
+    {
+        if (! auth()->user()?->can('settings.manage')) {
+            return $this->response->setStatusCode(403)->setJSON([
+                'ok'        => false,
+                'models'    => [],
+                'error'     => 'Sin permiso.',
+                'csrf_hash' => csrf_hash(),
+            ]);
+        }
+
+        $url = (string) ($this->request->getPost('url') ?? '');
+        $key = (string) ($this->request->getPost('api_key') ?? '');
+        $res = (new AiAssistantService())->listCloudModels($url, $key);
+        $res['csrf_hash'] = csrf_hash();
+
+        return $this->response->setJSON($res);
     }
 
     /////////////////////////////////////////////////////////////////////////////

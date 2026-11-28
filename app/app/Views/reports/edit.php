@@ -13,6 +13,24 @@
   .report-quill-wrapper { height: auto; overflow: visible; }
   .report-quill-wrapper .ql-container { height: auto !important; }
   .report-quill-wrapper .ql-editor { min-height: 360px; font-size: 0.96rem; line-height: 1.6; }
+  @media (max-width: 767.98px) {
+    #aiAssistBar {
+      display: grid !important;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.5rem;
+    }
+    #aiAssistBar .ai-assist-btn {
+      width: 100%;
+      padding-left: 0.4rem;
+      padding-right: 0.4rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #aiAssistBar .ai-assist-btn:last-child:nth-child(odd) {
+      grid-column: 1 / -1;
+    }
+  }
 </style>
 
 <div class="card mb-4">
@@ -142,21 +160,52 @@
       </div>
 
       <div class="mb-4 report-quill-wrapper">
-        <label class="form-label fw-semibold">Contenido del Informe</label>
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+          <label class="form-label fw-semibold mb-0">Contenido del Informe</label>
+          <?php if (! empty($aiEnabled)): ?>
+            <div class="d-flex flex-wrap gap-2 w-100 w-md-auto" id="aiAssistBar">
+              <button type="button" class="btn btn-sm btn-outline-primary flex-fill flex-md-grow-0 ai-assist-btn" data-ai-action="impression">
+                <i class="ti ti-wand me-1"></i> Generar Conclusión
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-primary flex-fill flex-md-grow-0 ai-assist-btn" data-ai-action="patient_summary">
+                <i class="ti ti-message me-1"></i> Resumen Paciente
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-primary flex-fill flex-md-grow-0 ai-assist-btn" data-ai-action="format">
+                <i class="ti ti-list-details me-1"></i> Ordenar
+              </button>
+            </div>
+          <?php endif; ?>
+        </div>
         <div id="report_editor"></div>
         <textarea class="d-none" id="clinical_history" name="clinical_history"><?= esc(old('clinical_history', $report['clinical_history'] ?? ($study['clinical_notes'] ?? ''))) ?></textarea>
         <textarea class="d-none" id="findings" name="findings"><?= esc(old('findings', $report['findings'] ?? '')) ?></textarea>
         <textarea class="d-none" id="impression" name="impression"><?= esc(old('impression', $report['impression'] ?? '')) ?></textarea>
       </div>
 
+      <?php if (empty($canSignReport)): ?>
+        <div class="alert alert-info py-2 px-3 small mb-3 d-flex align-items-center gap-2">
+          <i class="ti ti-shield-lock fs-5"></i>
+          <div>
+            <strong>Borrador:</strong>
+            <?php if (! empty($assignedDoctor)): ?>
+              Solo el médico asignado (<strong><?= esc($assignedDoctor->full_name ?: $assignedDoctor->username) ?></strong>) puede firmar y publicar este informe.
+            <?php else: ?>
+              Solo un usuario con rol Médico puede firmar y publicar este informe.
+            <?php endif; ?>
+          </div>
+        </div>
+      <?php endif; ?>
+
       <div class="d-flex flex-wrap justify-content-center gap-2 position-relative" style="z-index: 5;">
         <a href="<?= base_url('reports') ?>" class="btn btn-sm btn-dark">Cancelar</a>
         <button type="submit" name="action_type" value="draft" class="btn btn-sm btn-primary">
           <i class="ti ti-device-floppy me-1"></i> Guardar Borrador
         </button>
-        <button type="submit" name="action_type" value="publish" class="btn btn-sm btn-success">
-          <i class="ti ti-check me-1"></i> Firmar y Publicar Informe
-        </button>
+        <?php if (! empty($canSignReport)): ?>
+          <button type="submit" name="action_type" value="publish" class="btn btn-sm btn-success">
+            <i class="ti ti-check me-1"></i> Firmar y Publicar Informe
+          </button>
+        <?php endif; ?>
         <?php
           $currentUser     = auth()->user();
           $canDeleteReport = $report !== null && $currentUser !== null && (
@@ -179,6 +228,34 @@
     <?php endif; ?>
   </div>
 </div>
+
+<?php if (! empty($aiEnabled)): ?>
+  <div class="modal fade" id="aiPreviewModal" tabindex="-1" aria-labelledby="aiPreviewModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+      <div class="modal-content">
+        <div class="modal-header bg-primary-subtle">
+          <h5 class="modal-title text-primary fw-semibold" id="aiPreviewModalTitle">
+            <i class="ti ti-robot me-1"></i> Sugerencia del Asistente IA
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small mb-2" id="aiPreviewHint">Revisa y ajusta el texto antes de aplicarlo al informe.</p>
+          <div class="border rounded-2 p-3 ql-editor bg-body" id="aiPreviewEditor" contenteditable="true" style="min-height: 220px; max-height: 55vh; overflow-y: auto; font-size: 0.96rem; line-height: 1.6;"></div>
+        </div>
+        <div class="modal-footer flex-wrap gap-2">
+          <button type="button" class="btn btn-sm btn-dark" data-bs-dismiss="modal">Cerrar</button>
+          <button type="button" class="btn btn-sm btn-outline-primary" id="aiCopyBtn">
+            <i class="ti ti-copy me-1"></i> Copiar
+          </button>
+          <button type="button" class="btn btn-sm btn-primary" id="aiApplyBtn">
+            <i class="ti ti-check me-1"></i> Aplicar al informe
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+<?php endif; ?>
 
 <?= $this->section('scripts') ?>
 <script src="<?= base_url('assets/libs/quill/dist/quill.min.js') ?>" {csp-script-nonce}></script>
@@ -268,7 +345,14 @@
     let foundAnyHeading = false;
 
     Array.from(container.childNodes).forEach(function(node) {
-      if (node.nodeType === Node.ELEMENT_NODE && /^H[1-4]$/.test(node.tagName)) {
+      const isHeadingTag = node.nodeType === Node.ELEMENT_NODE && /^H[1-4]$/.test(node.tagName);
+      const isBoldSectionLabel = node.nodeType === Node.ELEMENT_NODE
+        && node.tagName === 'P'
+        && (node.textContent || '').trim().length <= 60
+        && node.querySelector('strong, b') !== null
+        && (node.querySelector('strong, b').textContent || '').trim() === (node.textContent || '').trim();
+
+      if (isHeadingTag || isBoldSectionLabel) {
         const headingText = (node.textContent || '')
           .toLowerCase()
           .normalize('NFD')
@@ -770,6 +854,253 @@
       }
     });
   }
+
+  <?php if (! empty($aiEnabled)): ?>
+  (function() {
+    const aiUrl      = <?= json_encode(base_url('reports/ai-assist')) ?>;
+    const aiModality = <?= json_encode((string) ($modality ?? '')) ?>;
+    const aiDesc     = <?= json_encode((string) ($study['study_description'] ?? '')) ?>;
+    const aiButtons  = document.querySelectorAll('.ai-assist-btn');
+    const modalEl    = document.getElementById('aiPreviewModal');
+    const titleEl    = document.getElementById('aiPreviewModalTitle');
+    const hintEl     = document.getElementById('aiPreviewHint');
+    const previewEl  = document.getElementById('aiPreviewEditor');
+    const applyBtn   = document.getElementById('aiApplyBtn');
+    const copyBtn    = document.getElementById('aiCopyBtn');
+    let currentAction = '';
+    let aiModal = null;
+
+    function escapeAiHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function inlineMarkdownToHtml(text) {
+      return escapeAiHtml(text)
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/__(.+?)__/g, '<strong>$1</strong>')
+        .replace(/(^|[^*])\*([^*]+)\*(?!\*)/g, '$1<em>$2</em>');
+    }
+
+    function markdownToEditorHtml(raw) {
+      const lines = String(raw || '').replace(/\r\n/g, '\n').split('\n');
+      const out = [];
+      let listType = null;
+
+      function closeList() {
+        if (listType) {
+          out.push('</' + listType + '>');
+          listType = null;
+        }
+      }
+
+      lines.forEach(function(rawLine) {
+        const line = rawLine.trim();
+        if (!line) {
+          closeList();
+          return;
+        }
+
+        const ulMatch = line.match(/^[-*•]\s+(.+)$/);
+        if (ulMatch) {
+          if (listType !== 'ul') {
+            closeList();
+            listType = 'ul';
+            out.push('<ul>');
+          }
+          out.push('<li>' + inlineMarkdownToHtml(ulMatch[1]) + '</li>');
+          return;
+        }
+
+        const olMatch = line.match(/^\d+[.)]\s+(.+)$/);
+        if (olMatch) {
+          if (listType !== 'ol') {
+            closeList();
+            listType = 'ol';
+            out.push('<ol>');
+          }
+          out.push('<li>' + inlineMarkdownToHtml(olMatch[1]) + '</li>');
+          return;
+        }
+
+        closeList();
+        const headingMatch = line.match(/^#{1,4}\s+(.+)$/);
+        if (headingMatch) {
+          out.push('<p><strong>' + inlineMarkdownToHtml(headingMatch[1]) + '</strong></p>');
+        } else {
+          out.push('<p>' + inlineMarkdownToHtml(line) + '</p>');
+        }
+      });
+
+      closeList();
+      return out.join('') || '<p><br></p>';
+    }
+
+    const actionMeta = {
+      impression: {
+        title: 'Conclusión / Impresión Diagnóstica sugerida',
+        hint: 'Se actualizará la sección de Conclusión / Impresión Diagnóstica manteniendo tus hallazgos.',
+        applyLabel: 'Aplicar a Conclusión',
+      },
+      format: {
+        title: 'Informe ordenado y maquetado',
+        hint: 'Revisa los subtítulos en negrita y saltos de línea antes de aplicarlo al informe.',
+        applyLabel: 'Aplicar al informe',
+      },
+      patient_summary: {
+        title: 'Resumen en lenguaje sencillo para el paciente',
+        hint: 'Puedes copiarlo para entregárselo al paciente o insertarlo al final del informe.',
+        applyLabel: 'Insertar al final del informe',
+      },
+    };
+
+    function syncCsrfInputs(newHash) {
+      if (!newHash) return;
+      csrfTokenHash = newHash;
+      document.querySelectorAll('input[name="' + csrfTokenName + '"]').forEach(function(inp) {
+        inp.value = newHash;
+      });
+    }
+
+    function setButtonsBusy(activeBtn, busy) {
+      aiButtons.forEach(function(btn) {
+        btn.disabled = busy;
+        if (btn === activeBtn) {
+          if (busy) {
+            btn.dataset.origHtml = btn.innerHTML;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Procesando...';
+          } else if (btn.dataset.origHtml) {
+            btn.innerHTML = btn.dataset.origHtml;
+          }
+        }
+      });
+    }
+
+    aiButtons.forEach(function(btn) {
+      btn.addEventListener('click', async function() {
+        const action = btn.getAttribute('data-ai-action') || '';
+        if (!action || !reportQuill) return;
+
+        syncUnifiedToTextareas();
+        const sections = splitUnifiedHtml(reportQuill.root.innerHTML);
+        const tmp = document.createElement('div');
+        if (action === 'patient_summary' && sections.impression) {
+          tmp.innerHTML = (sections.findings || '') + '\n' + sections.impression;
+        } else {
+          tmp.innerHTML = sections.findings || reportQuill.root.innerHTML;
+        }
+        const findingsPlain = (tmp.textContent || '').trim();
+
+        if (findingsPlain.length < 10) {
+          if (typeof Swal !== 'undefined') {
+            Swal.fire({ icon: 'warning', title: 'Faltan hallazgos', text: 'Escribe primero los hallazgos del estudio para usar el asistente.' });
+          } else {
+            alert('Escribe primero los hallazgos del estudio.');
+          }
+          return;
+        }
+
+        setButtonsBusy(btn, true);
+        try {
+          const body = new URLSearchParams();
+          body.set(csrfTokenName, csrfTokenHash);
+          body.set('action', action);
+          body.set('modality', aiModality);
+          body.set('study_description', aiDesc);
+          body.set('clinical_history', clinicalTa ? clinicalTa.value : '');
+          body.set('findings', findingsPlain);
+
+          const resp = await fetch(aiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+            body: body.toString(),
+          });
+          const data = await resp.json().catch(function() { return {}; });
+          if (data.csrf_hash) syncCsrfInputs(data.csrf_hash);
+
+          if (!resp.ok || !data.text) {
+            const msg = data.error || 'No se pudo obtener respuesta de la IA.';
+            if (typeof Swal !== 'undefined') {
+              Swal.fire({ icon: 'error', title: 'Error del asistente IA', text: msg });
+            } else {
+              alert(msg);
+            }
+            return;
+          }
+
+          currentAction = action;
+          const meta = actionMeta[action] || actionMeta.impression;
+          if (titleEl) titleEl.innerHTML = '<i class="ti ti-robot me-1"></i> ' + meta.title;
+          if (hintEl) hintEl.textContent = meta.hint;
+          if (applyBtn) applyBtn.innerHTML = '<i class="ti ti-check me-1"></i> ' + meta.applyLabel;
+          if (previewEl) previewEl.innerHTML = markdownToEditorHtml(data.text);
+
+          if (modalEl && typeof bootstrap !== 'undefined') {
+            aiModal = aiModal || new bootstrap.Modal(modalEl);
+            aiModal.show();
+          }
+        } catch (err) {
+          if (typeof Swal !== 'undefined') {
+            Swal.fire({ icon: 'error', title: 'Error de conexión', text: 'No se pudo contactar con el servidor.' });
+          } else {
+            alert('Error de conexión con el servidor.');
+          }
+        } finally {
+          setButtonsBusy(btn, false);
+        }
+      });
+    });
+
+    if (copyBtn && previewEl) {
+      copyBtn.addEventListener('click', async function() {
+        try {
+          await navigator.clipboard.writeText((previewEl.innerText || '').trim());
+          const orig = copyBtn.innerHTML;
+          copyBtn.innerHTML = '<i class="ti ti-check me-1"></i> Copiado';
+          setTimeout(function() { copyBtn.innerHTML = orig; }, 1500);
+        } catch (e) {}
+      });
+    }
+
+    if (applyBtn && previewEl) {
+      applyBtn.addEventListener('click', function() {
+        const plain = (previewEl.innerText || '').trim();
+        const html  = (previewEl.innerHTML || '').trim();
+        if (!plain || !html || !reportQuill) return;
+
+        const current = splitUnifiedHtml(reportQuill.root.innerHTML);
+        const withImpressionHeading = function(block) {
+          const val = (block || '').trim();
+          if (!val) return '';
+          return /^(<h[1-4]\b|<p>\s*<(strong|b)>)/i.test(val)
+            ? val
+            : ('<p><strong>Conclusión / Impresión Diagnóstica</strong></p>' + val);
+        };
+
+        if (currentAction === 'impression') {
+          const findingsPart   = (current.findings || reportQuill.root.innerHTML).trim();
+          const impressionPart = '<p><strong>Conclusión / Impresión Diagnóstica</strong></p>' + html;
+          const newHtml = composeUnifiedHtml(current.clinical_history, findingsPart, impressionPart);
+          reportQuill.clipboard.dangerouslyPasteHTML(newHtml);
+        } else if (currentAction === 'format') {
+          const impressionPart = withImpressionHeading(current.impression);
+          const newHtml = composeUnifiedHtml(current.clinical_history, html, impressionPart);
+          reportQuill.clipboard.dangerouslyPasteHTML(newHtml);
+        } else if (currentAction === 'patient_summary') {
+          const len = Math.max(0, reportQuill.getLength() - 1);
+          reportQuill.clipboard.dangerouslyPasteHTML(len, '<p><br></p><p><strong>Resumen para el Paciente</strong></p>' + html);
+        }
+
+        syncUnifiedToTextareas();
+        if (aiModal) aiModal.hide();
+      });
+    }
+  })();
+  <?php endif; ?>
 </script>
 <?= $this->endSection() ?>
 

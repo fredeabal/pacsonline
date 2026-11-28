@@ -18,6 +18,8 @@ class MedicalReportModel extends Model
     protected $allowedFields  = [
         'study_instance_uid',
         'doctor_user_id',
+        'created_by_user_id',
+        'updated_by_user_id',
         'status',
         'clinical_history',
         'findings',

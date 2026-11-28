@@ -27,10 +27,14 @@ final class AuthGroupsTest extends CIUnitTestCase
         $matrix = $config->matrix['medico'];
 
         $this->assertContains('reports.review', $matrix);
+        $this->assertContains('reports.sign', $matrix);
         $this->assertContains('studies.view_all', $matrix);
         $this->assertNotContains('studies.upload', $matrix);
         $this->assertNotContains('users.manage', $matrix);
         $this->assertNotContains('settings.manage', $matrix);
+        $this->assertNotContains('reports.sign', $config->matrix['admin']);
+        $this->assertNotContains('reports.sign', $config->matrix['usuario']);
+        $this->assertNotContains('reports.sign', $config->matrix['observador']);
     }
 
     public function testObservadorOnlyViewsAndNeverEditsOrUploads(): void

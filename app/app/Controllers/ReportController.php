@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Libraries\AiAssistantService;
 use App\Libraries\NotificationService;
 use App\Libraries\OrthancClient;
 use App\Libraries\ReportPdfService;
@@ -69,7 +70,64 @@ class ReportController extends BaseController
             $query['StudyDate'] = $dateRange;
         }
 
-        if ($scopedCenterId !== null) {
+        if ($filter === 'in_review') {
+            $draftRows = $reportModel
+                ->whereIn('status', ['in_review', 'draft'])
+                ->orderBy('updated_at', 'DESC')
+                ->orderBy('id', 'DESC')
+                ->findAll();
+
+            $draftUids = array_values(array_unique(array_filter(array_map(
+                static fn (array $r): string => trim((string) ($r['study_instance_uid'] ?? '')),
+                $draftRows
+            ))));
+
+            $draftRecords = $draftUids !== [] ? $studyModel->mapByStudyUids($draftUids) : [];
+            $filteredUids = [];
+            foreach ($draftUids as $dUid) {
+                $rec = $draftRecords[$dUid] ?? null;
+                if ($scopedCenterId !== null && (int) ($rec['center_id'] ?? 0) !== $scopedCenterId) {
+                    continue;
+                }
+                if ($dateFrom !== '' && ! empty($rec['study_date']) && (string) $rec['study_date'] < str_replace('-', '', $dateFrom)) {
+                    continue;
+                }
+                if ($dateTo !== '' && ! empty($rec['study_date']) && (string) $rec['study_date'] > str_replace('-', '', $dateTo)) {
+                    continue;
+                }
+                if ($search !== '' && $rec !== null) {
+                    $haystack = mb_strtolower(
+                        ((string) ($rec['patient_name'] ?? '')) . ' '
+                        . ((string) ($rec['study_description'] ?? '')) . ' '
+                        . $dUid
+                    );
+                    if (! str_contains($haystack, mb_strtolower($search))) {
+                        continue;
+                    }
+                }
+                $filteredUids[] = $dUid;
+            }
+
+            $totalCount = count($filteredUids);
+            $pageUids   = array_slice($filteredUids, $offset, $perPage + 1);
+            $hasNext    = count($pageUids) > $perPage;
+            if ($hasNext) {
+                $pageUids = array_slice($pageUids, 0, $perPage);
+            }
+
+            $studies = [];
+            foreach ($pageUids as $dUid) {
+                $rec   = $draftRecords[$dUid] ?? null;
+                $oid   = trim((string) ($rec['orthanc_id'] ?? ''));
+                $found = $oid !== '' ? $orthanc->getStudy($oid) : null;
+                if ($found === null) {
+                    $found = $orthanc->findStudyByUid($dUid);
+                }
+                if ($found !== null) {
+                    $studies[] = $found;
+                }
+            }
+        } elseif ($scopedCenterId !== null) {
             $applyCenterFilters = static function (StudyModel $model) use ($scopedCenterId, $dateFrom, $dateTo, $search): StudyModel {
                 $model->where('center_id', $scopedCenterId);
                 if ($dateFrom !== '') {
@@ -150,6 +208,9 @@ class ReportController extends BaseController
 
             $report = $reportsByUid[$uid] ?? null;
             $status = $report['status'] ?? 'pending';
+            if ($status === 'draft') {
+                $status = 'in_review';
+            }
 
             if ($filter !== 'all' && $status !== $filter) {
                 continue;
@@ -217,6 +278,10 @@ class ReportController extends BaseController
         }
 
         $report = model(MedicalReportModel::class)->findByStudyUid($studyUid);
+        if (! user_can_modify_report($user, $report, $study)) {
+            return redirect()->to('/studies/case/' . urlencode($studyUid))
+                ->with('error', 'Este informe ya fue firmado y publicado; solo el médico firmante puede modificarlo.');
+        }
         $orthanc          = new OrthancClient();
         $orthancStudyInfo = null;
 
@@ -281,14 +346,21 @@ class ReportController extends BaseController
             $scopedCenterId
         );
 
+        $assignedDoctor = ! empty($study['assigned_doctor_id'])
+            ? auth()->getProvider()->findById((int) $study['assigned_doctor_id'])
+            : null;
+
         return view('reports/edit', [
-            'title'        => 'Redactar Informe Médico | PACS Online',
-            'studyUid'     => $studyUid,
-            'study'        => $study,
-            'report'       => $report,
-            'templates'    => $templates,
-            'attachments'  => $attachments,
-            'priorStudies' => $priorStudies,
+            'title'          => 'Redactar Informe Médico | PACS Online',
+            'studyUid'       => $studyUid,
+            'study'          => $study,
+            'report'         => $report,
+            'templates'      => $templates,
+            'attachments'    => $attachments,
+            'priorStudies'   => $priorStudies,
+            'canSignReport'  => user_can_sign_report($user, $study),
+            'assignedDoctor' => $assignedDoctor,
+            'aiEnabled'      => (new AiAssistantService())->isAvailable(),
         ]);
     }
 
@@ -302,11 +374,9 @@ class ReportController extends BaseController
             return redirect()->to('/')->with('error', 'Sin permiso para guardar informes.');
         }
 
-        if (user_center_id($user) !== null) {
-            $localStudy = model(StudyModel::class)->findByStudyUid($studyUid);
-            if (! user_can_access_study($user, $localStudy)) {
-                return redirect()->to('/reports')->with('error', 'Sin permiso para guardar informes de otro centro.');
-            }
+        $localStudy = model(StudyModel::class)->findByStudyUid($studyUid);
+        if (user_center_id($user) !== null && ! user_can_access_study($user, $localStudy)) {
+            return redirect()->to('/reports')->with('error', 'Sin permiso para guardar informes de otro centro.');
         }
 
         $rules = [
@@ -350,9 +420,21 @@ class ReportController extends BaseController
         $reportModel = model(MedicalReportModel::class);
         $existing    = $reportModel->findByStudyUid($studyUid);
 
+        if (! user_can_modify_report($user, $existing, $localStudy)) {
+            return redirect()->to('/studies/case/' . urlencode($studyUid))
+                ->with('error', 'Este informe ya fue firmado y publicado; solo el médico firmante puede modificarlo.');
+        }
+
+        if ($isPublish && ! user_can_sign_report($user, $localStudy)) {
+            return redirect()->back()->withInput()
+                ->with('error', 'Solo el médico asignado (con rol Médico) puede firmar y publicar el informe. Puedes guardarlo como borrador.');
+        }
+
         $payload = [
             'study_instance_uid' => $studyUid,
-            'doctor_user_id'     => auth()->id(),
+            'doctor_user_id'     => $isPublish ? (int) auth()->id() : null,
+            'created_by_user_id' => $existing['created_by_user_id'] ?? (int) auth()->id(),
+            'updated_by_user_id' => (int) auth()->id(),
             'status'             => $status,
             'clinical_history'   => report_plain_text($clinicalHistory) !== '' ? $clinicalHistory : '',
             'findings'           => $findings,
@@ -370,7 +452,7 @@ class ReportController extends BaseController
             $isPublish ? 'report.published' : 'report.saved',
             $studyUid,
             null,
-            $isPublish ? 'Informe médico publicado' : 'Borrador guardado',
+            $isPublish ? 'Informe médico firmado y publicado' : 'Borrador guardado (pendiente de firma médica)',
             $this->request
         );
 
@@ -379,9 +461,10 @@ class ReportController extends BaseController
             (new NotificationService())->sendReportPublishedEmail($studyUid, $study, $payload);
         }
 
-        $msg = $isPublish ? 'Informe publicado.' : 'Borrador guardado.';
+        $msg    = $isPublish ? 'Informe publicado.' : 'Borrador guardado.';
+        $target = $isPublish ? '/reports' : '/reports/edit/' . urlencode($studyUid);
 
-        return redirect()->to('/reports')->with('message', $msg);
+        return redirect()->to($target)->with('message', $msg);
     }
 
     /////////////////////////////////////////////////////////////////////////////
@@ -396,6 +479,10 @@ class ReportController extends BaseController
 
         $study  = model(StudyModel::class)->findByStudyUid($studyUid);
         $report = model(MedicalReportModel::class)->findByStudyUid($studyUid);
+        if (! user_can_modify_report($user, $report, $study)) {
+            return redirect()->to('/studies/case/' . urlencode($studyUid))
+                ->with('error', 'Este informe ya fue firmado y publicado; solo el médico firmante puede modificarlo.');
+        }
 
         $canReview = $user->can('reports.review');
         if (! user_can_access_study($user, $study)) {
@@ -519,5 +606,186 @@ class ReportController extends BaseController
             'text'      => $text,
             'csrf_hash' => csrf_hash(),
         ]);
+    }
+
+    /////////////////////////////////////////////////////////////////////////////
+    // Asistente IA: genera conclusión, ordena el informe o resume al paciente.//
+    /////////////////////////////////////////////////////////////////////////////
+    public function aiAssist(): ResponseInterface
+    {
+        if (! auth()->user()?->can('reports.review')) {
+            return $this->response->setStatusCode(403)->setJSON([
+                'error'     => 'Sin permiso para usar el asistente de IA.',
+                'csrf_hash' => csrf_hash(),
+            ]);
+        }
+
+        @set_time_limit(130);
+
+        $action = trim((string) $this->request->getPost('action'));
+        $res    = (new AiAssistantService())->assist($action, [
+            'modality'          => (string) $this->request->getPost('modality'),
+            'study_description' => (string) $this->request->getPost('study_description'),
+            'clinical_history'  => (string) $this->request->getPost('clinical_history'),
+            'findings'          => (string) $this->request->getPost('findings'),
+        ]);
+
+        if (! $res['ok']) {
+            return $this->response->setStatusCode(422)->setJSON([
+                'error'     => $res['error'] ?? 'No se pudo procesar la solicitud de IA.',
+                'csrf_hash' => csrf_hash(),
+            ]);
+        }
+
+        return $this->response->setJSON([
+            'text'      => $res['text'] ?? '',
+            'csrf_hash' => csrf_hash(),
+        ]);
+    }
+
+    /////////////////////////////////////////////////////////////////////////////
+    // Importa texto de un PDF (DICOM encapsulado o adjunto) al borrador.      //
+    /////////////////////////////////////////////////////////////////////////////
+    public function importPdf(string $studyUid): RedirectResponse
+    {
+        $user = auth()->user();
+        if (! $user?->can('reports.review')) {
+            return redirect()->to('/studies/case/' . urlencode($studyUid))
+                ->with('error', 'Sin permiso para importar informes.');
+        }
+
+        $study          = model(StudyModel::class)->findByStudyUid($studyUid);
+        $scopedCenterId = user_center_id($user);
+        if ($scopedCenterId !== null && ! user_can_access_study($user, $study)) {
+            return redirect()->to('/studies')->with('error', 'Sin permiso para acceder a este estudio.');
+        }
+
+        $reportModel = model(MedicalReportModel::class);
+        $existing    = $reportModel->findByStudyUid($studyUid);
+        if (! user_can_modify_report($user, $existing, $study)) {
+            return redirect()->to('/studies/case/' . urlencode($studyUid))
+                ->with('error', 'Este informe ya fue firmado y publicado; solo el médico firmante puede modificarlo.');
+        }
+
+        $source   = trim((string) ($this->request->getPost('source') ?? ''));
+        $pdfBytes = null;
+        $docLabel = 'PDF';
+
+        if ($source === 'dicom') {
+            $instanceId = trim((string) ($this->request->getPost('instance_id') ?? ''));
+            if ($instanceId === '') {
+                return redirect()->to('/studies/case/' . urlencode($studyUid))
+                    ->with('error', 'Documento DICOM no especificado.');
+            }
+
+            $orthanc   = new OrthancClient();
+            $studyInfo = ! empty($study['orthanc_id']) ? $orthanc->getStudy((string) $study['orthanc_id']) : null;
+            if ($studyInfo === null) {
+                $studyInfo = $orthanc->findStudyByUid($studyUid);
+            }
+            if ($studyInfo === null) {
+                return redirect()->to('/studies/case/' . urlencode($studyUid))
+                    ->with('error', 'Estudio no encontrado en Orthanc.');
+            }
+
+            $validDoc = null;
+            foreach ($orthanc->findStudyDicomDocuments($studyInfo) as $doc) {
+                if ((string) ($doc['instance_id'] ?? '') === $instanceId) {
+                    $validDoc = $doc;
+                    break;
+                }
+            }
+            if ($validDoc === null) {
+                return redirect()->to('/studies/case/' . urlencode($studyUid))
+                    ->with('error', 'El PDF indicado no pertenece a este estudio.');
+            }
+
+            $pdfBytes = $orthanc->getInstancePdf($instanceId);
+            $docLabel = (string) ($validDoc['title'] ?? 'Informe_DICOM.pdf');
+        } elseif ($source === 'attachment') {
+            $attId = (int) ($this->request->getPost('attachment_id') ?? 0);
+            $att   = $attId > 0 ? model(StudyAttachmentModel::class)->find($attId) : null;
+            if ($att === null || (string) ($att['study_instance_uid'] ?? '') !== $studyUid) {
+                return redirect()->to('/studies/case/' . urlencode($studyUid))
+                    ->with('error', 'Adjunto PDF no encontrado en este estudio.');
+            }
+
+            $ext  = strtolower((string) pathinfo((string) ($att['original_name'] ?? ''), PATHINFO_EXTENSION));
+            $mime = strtolower((string) ($att['mime_type'] ?? ''));
+            if ($ext !== 'pdf' && $mime !== 'application/pdf') {
+                return redirect()->to('/studies/case/' . urlencode($studyUid))
+                    ->with('error', 'Solo se pueden importar archivos PDF.');
+            }
+
+            $path = WRITEPATH . 'uploads/attachments/' . basename((string) $att['stored_name']);
+            if (! is_file($path)) {
+                return redirect()->to('/studies/case/' . urlencode($studyUid))
+                    ->with('error', 'El archivo PDF no está disponible en disco.');
+            }
+
+            $pdfBytes = @file_get_contents($path) ?: null;
+            $docLabel = (string) ($att['original_name'] ?? 'Adjunto.pdf');
+        } else {
+            return redirect()->to('/studies/case/' . urlencode($studyUid))
+                ->with('error', 'Origen de importación no válido.');
+        }
+
+        if ($pdfBytes === null || $pdfBytes === '') {
+            return redirect()->to('/studies/case/' . urlencode($studyUid))
+                ->with('error', 'No se pudo leer el contenido del archivo PDF.');
+        }
+
+        try {
+            $parser  = new \Smalot\PdfParser\Parser();
+            $pdf     = $parser->parseContent($pdfBytes);
+            $rawText = trim((string) $pdf->getText());
+        } catch (\Throwable $e) {
+            return redirect()->to('/studies/case/' . urlencode($studyUid))
+                ->with('error', 'No se pudo extraer texto del PDF (' . $e->getMessage() . ').');
+        }
+
+        $rawText = str_replace(["\r\n", "\r"], "\n", $rawText);
+        $rawText = (string) preg_replace("/\n{3,}/", "\n\n", $rawText);
+        $lines   = array_values(array_filter(array_map('trim', explode("\n", $rawText)), static fn (string $l): bool => $l !== ''));
+
+        if ($lines === []) {
+            return redirect()->to('/studies/case/' . urlencode($studyUid))
+                ->with('error', 'El PDF no contiene texto seleccionable (puede ser un documento escaneado como imagen).');
+        }
+
+        $htmlBlocks = array_map(
+            static fn (string $line): string => '<p>' . esc($line) . '</p>',
+            $lines
+        );
+        $findingsHtml = implode('', $htmlBlocks);
+
+        $payload = [
+            'study_instance_uid' => $studyUid,
+            'doctor_user_id'     => $existing['doctor_user_id'] ?? null,
+            'created_by_user_id' => $existing['created_by_user_id'] ?? (int) auth()->id(),
+            'updated_by_user_id' => (int) auth()->id(),
+            'status'             => ($existing !== null && ($existing['status'] ?? '') === 'reported') ? 'reported' : 'in_review',
+            'clinical_history'   => $existing['clinical_history'] ?? ($study['clinical_notes'] ?? ''),
+            'findings'           => $findingsHtml,
+            'impression'         => '',
+            'reported_at'        => $existing['reported_at'] ?? null,
+        ];
+
+        if ($existing !== null) {
+            $reportModel->update((int) $existing['id'], $payload);
+        } else {
+            $reportModel->insert($payload);
+        }
+
+        AuditLogModel::record(
+            'report.imported_pdf',
+            $studyUid,
+            null,
+            'Texto importado al informe desde PDF: ' . $docLabel,
+            $this->request
+        );
+
+        return redirect()->to('/reports/edit/' . urlencode($studyUid))
+            ->with('message', 'Texto importado desde "' . $docLabel . '". Revísalo antes de guardar o publicar.');
     }
 }

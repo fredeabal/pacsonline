@@ -217,12 +217,24 @@
       <img src="<?= $signatureDataUri ?>" style="max-height: 58px; margin-bottom: 6px; display: block;" alt="Firma" />
     <?php endif; ?>
     <div class="signature-line">
-      <div class="signature-name"><?= esc($doctor ? ($doctor->full_name ?: $doctor->username) : 'Equipo Médico PACS Online') ?></div>
-      <?php if ($doctor && ! empty($doctor->specialty)): ?>
-        <div class="signature-meta"><?= esc($doctor->specialty) ?></div>
-      <?php endif; ?>
-      <?php if ($doctor && ! empty($doctor->license_number)): ?>
-        <div class="signature-meta">Nº Colegiado: <?= esc($doctor->license_number) ?></div>
+      <?php if (($report['status'] ?? '') !== 'reported'): ?>
+        <?php if (! empty($assignedDoctor)): ?>
+          <div class="signature-name"><?= esc($assignedDoctor->full_name ?: $assignedDoctor->username) ?></div>
+          <div class="signature-meta">Pendiente de firma médica</div>
+        <?php else: ?>
+          <div class="signature-name">Pendiente de firma médica</div>
+        <?php endif; ?>
+        <?php if (! empty($transcriber)): ?>
+          <div class="signature-meta">Transcrito por: <?= esc($transcriber->full_name ?: $transcriber->username) ?></div>
+        <?php endif; ?>
+      <?php else: ?>
+        <div class="signature-name"><?= esc($doctor ? ($doctor->full_name ?: $doctor->username) : 'Equipo Médico PACS Online') ?></div>
+        <?php if ($doctor && ! empty($doctor->specialty)): ?>
+          <div class="signature-meta"><?= esc($doctor->specialty) ?></div>
+        <?php endif; ?>
+        <?php if ($doctor && ! empty($doctor->license_number)): ?>
+          <div class="signature-meta">Nº Colegiado: <?= esc($doctor->license_number) ?></div>
+        <?php endif; ?>
       <?php endif; ?>
       <div class="signature-meta">Fecha: <?= esc($reportDate) ?></div>
     </div>

@@ -74,6 +74,8 @@ $routes->group('', ['filter' => 'session'], static function ($routes) {
     $routes->post('reports/save/(:segment)', [ReportController::class, 'save']);
     $routes->post('reports/delete/(:segment)', [ReportController::class, 'delete']);
     $routes->post('reports/transcribe', [ReportController::class, 'transcribe']);
+    $routes->post('reports/ai-assist', [ReportController::class, 'aiAssist']);
+    $routes->post('reports/import-pdf/(:segment)', [ReportController::class, 'importPdf']);
     $routes->get('reports/pdf/(:segment)', [ReportController::class, 'pdf']);
 
     // Plantillas personales por médico
@@ -109,5 +111,9 @@ $routes->group('', ['filter' => 'session'], static function ($routes) {
     $routes->get('settings', [SettingController::class, 'index']);
     $routes->post('settings/smtp', [SettingController::class, 'saveSmtp']);
     $routes->post('settings/test-email', [SettingController::class, 'testEmail']);
+    $routes->post('settings/ai', [SettingController::class, 'saveAi']);
+    $routes->post('settings/test-ai', [SettingController::class, 'testAi']);
+    $routes->get('settings/ollama-models', [SettingController::class, 'ollamaModels']);
+    $routes->post('settings/cloud-models', [SettingController::class, 'cloudModels']);
     $routes->post('settings/clear-temp', [SettingController::class, 'clearTemp']);
 });

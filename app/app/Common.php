@@ -105,16 +105,16 @@ if (! function_exists('extract_study_modality')) {
 
         $desc = strtoupper(trim((string) ($study['MainDicomTags']['StudyDescription'] ?? $study['study_description'] ?? '')));
         if ($desc !== '') {
-            if (preg_match('/\b(TAC|CT|TOMOGRAF)/u', $desc)) {
+            if (preg_match('/\b(TAC|CT)\b|\bTOMOGRAF/u', $desc)) {
                 return 'CT';
             }
-            if (preg_match('/\b(RM|MR|RESONANCIA)/u', $desc)) {
+            if (preg_match('/\b(RM|MR)\b|\bRESONANCIA/u', $desc)) {
                 return 'MR';
             }
-            if (preg_match('/\b(RX|CR|DX|RADIOGRAF)/u', $desc)) {
+            if (preg_match('/\b(RX|CR|DX)\b|\bRADIOGRAF/u', $desc)) {
                 return 'RX';
             }
-            if (preg_match('/\b(ECO|US|ULTRASON)/u', $desc)) {
+            if (preg_match('/\b(ECO|US)\b|\bULTRASON/u', $desc)) {
                 return 'US';
             }
             if (preg_match('/\b(MAMO|MG)\b/u', $desc)) {
@@ -188,20 +188,20 @@ if (! function_exists('extract_patient_age')) {
 
 if (! function_exists('format_patient_name')) {
     /**
-     * Limpia el formato DICOM PN (separadores `^` y `=`) en el nombre del paciente para mostrarlo legible.
+     * Limpia el formato DICOM PN (separadores `^` y `=`) en el nombre del paciente para mostrarlo legible en mayúsculas.
      */
-    function format_patient_name(?string $name, string $fallback = 'Anónimo'): string
+    function format_patient_name(?string $name, string $fallback = 'ANÓNIMO'): string
     {
         $raw = trim((string) $name);
         if ($raw === '') {
-            return $fallback;
+            return mb_strtoupper($fallback, 'UTF-8');
         }
 
         // En DICOM PN el grupo alfabético va antes de `=` y los componentes se separan con `^`.
         $alpha = explode('=', $raw)[0];
         $clean = trim((string) preg_replace('/\s+/', ' ', str_replace('^', ' ', $alpha)));
 
-        return $clean !== '' ? $clean : $fallback;
+        return $clean !== '' ? mb_strtoupper($clean, 'UTF-8') : mb_strtoupper($fallback, 'UTF-8');
     }
 }
 
@@ -227,6 +227,23 @@ if (! function_exists('ohif_url')) {
     function ohif_url(string $studyUid): string
     {
         return '/viewer/viewer?StudyInstanceUIDs=' . urlencode($studyUid) . '&lng=es';
+    }
+}
+
+if (! function_exists('ohif_compare_url')) {
+    /**
+     * Construye la URL de OHIF Viewer para abrir varios estudios en paralelo (comparación con previos).
+     *
+     * @param list<string> $studyUids
+     */
+    function ohif_compare_url(array $studyUids): string
+    {
+        $clean = array_values(array_unique(array_filter(array_map('trim', $studyUids), static fn (string $u): bool => $u !== '')));
+        if ($clean === []) {
+            return '/viewer/';
+        }
+
+        return '/viewer/viewer?StudyInstanceUIDs=' . implode(',', array_map('urlencode', $clean)) . '&lng=es';
     }
 }
 
@@ -368,6 +385,130 @@ if (! function_exists('merge_local_study_metadata')) {
             $study['MainDicomTags']['StudyDate'] = $localDate;
         }
 
+        $localModality = trim((string) ($record['modality'] ?? ''));
+        if ($localModality !== '' && empty($study['modality'])) {
+            $study['modality'] = $localModality;
+        }
+
         return $study;
+    }
+}
+
+if (! function_exists('user_center_id')) {
+    /**
+     * Devuelve el ID del centro asignado al usuario si está restringido a una sola clínica,
+     * o null si tiene acceso a todos los centros.
+     */
+    function user_center_id(?\CodeIgniter\Shield\Entities\User $user = null): ?int
+    {
+        $target = $user ?? auth()->user();
+        if ($target === null) {
+            return null;
+        }
+
+        $raw = $target->center_id ?? null;
+        if ($raw === null || $raw === '' || (int) $raw <= 0) {
+            return null;
+        }
+
+        return (int) $raw;
+    }
+}
+
+if (! function_exists('user_can_access_study')) {
+    /**
+     * Evalúa si un usuario autenticado tiene permiso para acceder a un estudio concreto,
+     * respetando tanto el aislamiento por centro (`users.center_id`) como la propiedad del estudio.
+     *
+     * @param array<string, mixed>|null $studyRecord
+     */
+    function user_can_access_study(?\CodeIgniter\Shield\Entities\User $user, ?array $studyRecord): bool
+    {
+        if ($user === null) {
+            return false;
+        }
+
+        $scopedCenterId = user_center_id($user);
+        if ($scopedCenterId !== null) {
+            return $studyRecord !== null && (int) ($studyRecord['center_id'] ?? 0) === $scopedCenterId;
+        }
+
+        if ($user->can('studies.view_all')) {
+            return true;
+        }
+
+        return $studyRecord !== null && (int) ($studyRecord['owner_user_id'] ?? 0) === (int) $user->id;
+    }
+}
+
+if (! function_exists('sanitize_report_html')) {
+    /**
+     * Limpia el HTML generado por el editor enriquecido permitiendo solo formato seguro.
+     */
+    function sanitize_report_html(?string $html): string
+    {
+        $raw = trim((string) $html);
+        if ($raw === '') {
+            return '';
+        }
+
+        $clean = strip_tags($raw, '<p><br><strong><b><em><i><u><s><ul><ol><li><h1><h2><h3><h4><blockquote>');
+        // Eliminar cualquier atributo excepto clases de alineación de Quill (ql-align-*)
+        $clean = (string) preg_replace_callback(
+            '/<([a-z0-9]+)\b([^>]*)>/i',
+            static function (array $m): string {
+                $tag   = strtolower($m[1]);
+                $attrs = $m[2];
+                if (preg_match('/class\s*=\s*"([^"]*)"/i', $attrs, $cm) === 1) {
+                    $classes = preg_grep('/^ql-align-(center|right|justify)$/', preg_split('/\s+/', trim($cm[1])) ?: []);
+                    if ($classes !== false && $classes !== []) {
+                        return '<' . $tag . ' class="' . implode(' ', $classes) . '">';
+                    }
+                }
+
+                return '<' . $tag . '>';
+            },
+            $clean
+        );
+
+        return trim($clean);
+    }
+}
+
+if (! function_exists('report_plain_text')) {
+    /**
+     * Convierte contenido de informe (HTML o texto plano) en texto legible sin etiquetas.
+     */
+    function report_plain_text(?string $content): string
+    {
+        $raw = (string) $content;
+        if ($raw === '') {
+            return '';
+        }
+
+        $withBreaks = str_ireplace(['<br>', '<br/>', '<br />', '</p>', '</li>', '</h1>', '</h2>', '</h3>', '</h4>'], "\n", $raw);
+        $plain      = html_entity_decode(strip_tags($withBreaks), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $plain      = (string) preg_replace("/\n{3,}/", "\n\n", $plain);
+
+        return trim($plain);
+    }
+}
+
+if (! function_exists('render_report_html')) {
+    /**
+     * Renderiza el contenido del informe para PDF/vista manteniendo compatibilidad con texto plano.
+     */
+    function render_report_html(?string $content): string
+    {
+        $raw = trim((string) $content);
+        if ($raw === '') {
+            return '';
+        }
+
+        if (preg_match('/<[a-z][\s\S]*>/i', $raw) === 1) {
+            return sanitize_report_html($raw);
+        }
+
+        return nl2br(esc($raw));
     }
 }

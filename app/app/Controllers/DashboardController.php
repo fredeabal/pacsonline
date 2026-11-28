@@ -54,11 +54,18 @@ class DashboardController extends BaseController
      */
     private function collectDashboardData(): array
     {
-        $user         = auth()->user();
-        $isSupervisor = $user?->can('users.manage') ?? false;
-        $isMedico     = ($user?->can('reports.review') ?? false) && ! $isSupervisor;
-        $isUsuario    = ! $isSupervisor && ! $isMedico && ($user?->can('studies.share') ?? false);
-        $roleMode     = $isSupervisor ? 'admin' : ($isMedico ? 'medico' : ($isUsuario ? 'usuario' : 'observador'));
+        $user           = auth()->user();
+        $scopedCenterId = user_center_id($user);
+        $isSupervisor   = $scopedCenterId === null && ($user?->can('users.manage') ?? false);
+        $isMedico       = ($user?->can('reports.review') ?? false) && ! $isSupervisor;
+        $isUsuario      = ! $isSupervisor && ! $isMedico && ($user?->can('studies.share') ?? false);
+        $roleMode       = $isSupervisor ? 'admin' : ($isMedico ? 'medico' : ($isUsuario ? 'usuario' : 'observador'));
+
+        $scopedCenterName = null;
+        if ($scopedCenterId !== null) {
+            $centerRow        = model(\App\Models\MedicalCenterModel::class)->find($scopedCenterId);
+            $scopedCenterName = is_array($centerRow) ? (string) ($centerRow['name'] ?? '') : null;
+        }
 
         $orthanc     = new OrthancClient();
         $alive       = $orthanc->isAlive();
@@ -84,14 +91,30 @@ class DashboardController extends BaseController
                 }
             }
         }
-        $totalStudies  = $alive ? ($stats['CountStudies'] ?? $orthanc->countStudies()) : 0;
-        $reportedCount = (int) $reportModel->where('status', 'reported')->countAllResults();
-        $pendingCount  = max(0, $totalStudies - $reportedCount);
-        $urgentCount   = (int) $studyModel->builder()
-            ->join('medical_reports', "medical_reports.study_instance_uid = studies.study_instance_uid AND medical_reports.status = 'reported'", 'left')
-            ->where('studies.priority', 'urgent')
-            ->where('medical_reports.id IS NULL', null, false)
-            ->countAllResults();
+
+        if ($scopedCenterId !== null) {
+            $totalStudies  = (int) $studyModel->where('center_id', $scopedCenterId)->countAllResults();
+            $reportedCount = (int) $studyModel->builder()
+                ->join('medical_reports', "medical_reports.study_instance_uid = studies.study_instance_uid AND medical_reports.status = 'reported'", 'inner')
+                ->where('studies.center_id', $scopedCenterId)
+                ->countAllResults();
+            $pendingCount = max(0, $totalStudies - $reportedCount);
+            $urgentCount  = (int) $studyModel->builder()
+                ->join('medical_reports', "medical_reports.study_instance_uid = studies.study_instance_uid AND medical_reports.status = 'reported'", 'left')
+                ->where('studies.center_id', $scopedCenterId)
+                ->where('studies.priority', 'urgent')
+                ->where('medical_reports.id IS NULL', null, false)
+                ->countAllResults();
+        } else {
+            $totalStudies  = $alive ? ($stats['CountStudies'] ?? $orthanc->countStudies()) : 0;
+            $reportedCount = (int) $reportModel->where('status', 'reported')->countAllResults();
+            $pendingCount  = max(0, $totalStudies - $reportedCount);
+            $urgentCount   = (int) $studyModel->builder()
+                ->join('medical_reports', "medical_reports.study_instance_uid = studies.study_instance_uid AND medical_reports.status = 'reported'", 'left')
+                ->where('studies.priority', 'urgent')
+                ->where('medical_reports.id IS NULL', null, false)
+                ->countAllResults();
+        }
 
         $alerts = [];
         if (! $alive) {
@@ -129,8 +152,9 @@ class DashboardController extends BaseController
         }
 
         return [
-            'roleMode'      => $roleMode,
-            'orthancAlive'  => $alive,
+            'roleMode'         => $roleMode,
+            'scopedCenterName' => $scopedCenterName,
+            'orthancAlive'     => $alive,
             'orthancStats'  => $stats,
             'diskStats'     => $diskStats,
             'alerts'        => $alerts,

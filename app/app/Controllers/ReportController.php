@@ -55,7 +55,8 @@ class ReportController extends BaseController
             $attachmentCounts[(string) $attRow['study_instance_uid']] = (int) $attRow['total'];
         }
 
-        $query = [];
+        $scopedCenterId = user_center_id();
+        $query          = [];
         if ($search !== '') {
             $tagKey         = preg_match('/\d/', $search) === 1 ? 'PatientID' : 'PatientName';
             $query[$tagKey] = '*' . $search . '*';
@@ -68,10 +69,55 @@ class ReportController extends BaseController
             $query['StudyDate'] = $dateRange;
         }
 
-        $fetched    = $orthanc->findStudiesPage($offset, $perPage + 1, $query);
-        $hasNext    = count($fetched) > $perPage;
-        $studies    = $hasNext ? array_slice($fetched, 0, $perPage) : $fetched;
-        $totalCount = ($query === [] && $scope === 'all' && $filter === 'all') ? $orthanc->countStudies() : null;
+        if ($scopedCenterId !== null) {
+            $applyCenterFilters = static function (StudyModel $model) use ($scopedCenterId, $dateFrom, $dateTo, $search): StudyModel {
+                $model->where('center_id', $scopedCenterId);
+                if ($dateFrom !== '') {
+                    $model->where('study_date >=', str_replace('-', '', $dateFrom));
+                }
+                if ($dateTo !== '') {
+                    $model->where('study_date <=', str_replace('-', '', $dateTo));
+                }
+                if ($search !== '') {
+                    $model->groupStart()
+                        ->like('patient_name', $search, 'both', null, true)
+                        ->orLike('study_description', $search, 'both', null, true)
+                        ->orLike('study_instance_uid', $search, 'both', null, true)
+                        ->groupEnd();
+                }
+
+                return $model;
+            };
+
+            $centerRows = $applyCenterFilters(model(StudyModel::class))
+                ->orderBy('study_date', 'DESC')
+                ->orderBy('id', 'DESC')
+                ->findAll($perPage + 1, $offset);
+            $hasNext = count($centerRows) > $perPage;
+            if ($hasNext) {
+                $centerRows = array_slice($centerRows, 0, $perPage);
+            }
+            $studies = [];
+            foreach ($centerRows as $row) {
+                $oid   = trim((string) ($row['orthanc_id'] ?? ''));
+                $found = $oid !== '' ? $orthanc->getStudy($oid) : null;
+                if ($found === null) {
+                    $found = $orthanc->findStudyByUid((string) ($row['study_instance_uid'] ?? ''));
+                }
+                if ($found === null) {
+                    continue;
+                }
+                $studies[] = $found;
+            }
+            $totalCount = ($scope === 'all' && $filter === 'all' && $modalityFilter === 'ALL')
+                ? (int) $applyCenterFilters(model(StudyModel::class))->countAllResults()
+                : null;
+        } else {
+            $fetched    = $orthanc->findStudiesPage($offset, $perPage + 1, $query);
+            $hasNext    = count($fetched) > $perPage;
+            $studies    = $hasNext ? array_slice($fetched, 0, $perPage) : $fetched;
+            $totalCount = ($query === [] && $scope === 'all' && $filter === 'all') ? $orthanc->countStudies() : null;
+        }
 
         $uids = [];
         foreach ($studies as $study) {
@@ -82,6 +128,7 @@ class ReportController extends BaseController
         }
 
         $recordsByUid = $studyModel->mapByStudyUids($uids);
+        $studies      = $studyModel->resolveAndPersistModalities($orthanc, $studies, $recordsByUid);
         $reportsByUid = $reportModel->mapByStudyUids($uids);
 
         $availableModalities = ['MR' => true, 'CT' => true, 'CR' => true, 'DX' => true, 'US' => true, 'SC' => true];
@@ -158,11 +205,17 @@ class ReportController extends BaseController
     /////////////////////////////////////////////////////////////////////////////
     public function edit(string $studyUid): string|RedirectResponse
     {
-        if (! auth()->user()?->can('reports.review')) {
+        $user = auth()->user();
+        if (! $user?->can('reports.review')) {
             return redirect()->to('/')->with('error', 'Sin permiso para informar.');
         }
 
-        $study  = model(StudyModel::class)->findByStudyUid($studyUid);
+        $study          = model(StudyModel::class)->findByStudyUid($studyUid);
+        $scopedCenterId = user_center_id($user);
+        if ($scopedCenterId !== null && ! user_can_access_study($user, $study)) {
+            return redirect()->to('/reports')->with('error', 'Sin permiso para informar estudios de otro centro.');
+        }
+
         $report = model(MedicalReportModel::class)->findByStudyUid($studyUid);
         $orthanc          = new OrthancClient();
         $orthancStudyInfo = null;
@@ -215,16 +268,27 @@ class ReportController extends BaseController
 
         $tplModel = model(ReportTemplateModel::class);
         $tplModel->seedDefaultsForUser((int) auth()->id());
-        $templates   = $tplModel->forUser((int) auth()->id());
-        $attachments = model(StudyAttachmentModel::class)->forStudy($studyUid);
+        $templates    = $tplModel->forUser((int) auth()->id());
+        $attachments  = model(StudyAttachmentModel::class)->forStudy($studyUid);
+        $priorStudies = (new \App\Libraries\PriorStudiesService())->findForStudy(
+            $orthanc,
+            (string) ($study['patient_id'] ?? ''),
+            $studyUid,
+            $scopedCenterId === null,
+            true,
+            (int) auth()->id(),
+            15,
+            $scopedCenterId
+        );
 
         return view('reports/edit', [
-            'title'       => 'Redactar Informe Médico | PACS Online',
-            'studyUid'    => $studyUid,
-            'study'       => $study,
-            'report'      => $report,
-            'templates'   => $templates,
-            'attachments' => $attachments,
+            'title'        => 'Redactar Informe Médico | PACS Online',
+            'studyUid'     => $studyUid,
+            'study'        => $study,
+            'report'       => $report,
+            'templates'    => $templates,
+            'attachments'  => $attachments,
+            'priorStudies' => $priorStudies,
         ]);
     }
 
@@ -233,8 +297,16 @@ class ReportController extends BaseController
     /////////////////////////////////////////////////////////////////////////////
     public function save(string $studyUid): RedirectResponse
     {
-        if (! auth()->user()?->can('reports.review')) {
+        $user = auth()->user();
+        if (! $user?->can('reports.review')) {
             return redirect()->to('/')->with('error', 'Sin permiso para guardar informes.');
+        }
+
+        if (user_center_id($user) !== null) {
+            $localStudy = model(StudyModel::class)->findByStudyUid($studyUid);
+            if (! user_can_access_study($user, $localStudy)) {
+                return redirect()->to('/reports')->with('error', 'Sin permiso para guardar informes de otro centro.');
+            }
         }
 
         $rules = [
@@ -248,7 +320,7 @@ class ReportController extends BaseController
             ],
             'impression' => [
                 'label' => 'Conclusión',
-                'rules' => 'required|min_length[3]|max_length[10000]',
+                'rules' => 'permit_empty|max_length[10000]',
             ],
             'action_type' => [
                 'label' => 'Acción',
@@ -260,7 +332,19 @@ class ReportController extends BaseController
             return redirect()->back()->withInput()->with('errors', $this->validator->getErrors());
         }
 
-        $data        = $this->validator->getValidated();
+        $data            = $this->validator->getValidated();
+        $clinicalHistory = sanitize_report_html($data['clinical_history'] ?? '');
+        $findings        = sanitize_report_html($data['findings']);
+        $impression      = sanitize_report_html($data['impression']);
+
+        if (mb_strlen(report_plain_text($findings)) < 5) {
+            return redirect()->back()->withInput()->with('errors', ['findings' => 'El campo Hallazgos debe tener al menos 5 caracteres.']);
+        }
+        $impressionPlain = report_plain_text($impression);
+        if ($impressionPlain !== '' && mb_strlen($impressionPlain) < 3) {
+            return redirect()->back()->withInput()->with('errors', ['impression' => 'La Conclusión debe tener al menos 3 caracteres.']);
+        }
+
         $isPublish   = $data['action_type'] === 'publish';
         $status      = $isPublish ? 'reported' : 'in_review';
         $reportModel = model(MedicalReportModel::class);
@@ -270,9 +354,9 @@ class ReportController extends BaseController
             'study_instance_uid' => $studyUid,
             'doctor_user_id'     => auth()->id(),
             'status'             => $status,
-            'clinical_history'   => $data['clinical_history'],
-            'findings'           => $data['findings'],
-            'impression'         => $data['impression'],
+            'clinical_history'   => report_plain_text($clinicalHistory) !== '' ? $clinicalHistory : '',
+            'findings'           => $findings,
+            'impression'         => $impression,
             'reported_at'        => $isPublish ? date('Y-m-d H:i:s') : ($existing['reported_at'] ?? null),
         ];
 
@@ -313,11 +397,8 @@ class ReportController extends BaseController
         $study  = model(StudyModel::class)->findByStudyUid($studyUid);
         $report = model(MedicalReportModel::class)->findByStudyUid($studyUid);
 
-        $canReview  = $user->can('reports.review');
-        $canViewAll = $user->can('studies.view_all');
-        $isOwner    = $study !== null && (int) $study['owner_user_id'] === (int) $user->id;
-
-        if (! $canReview && ! $canViewAll && ! $isOwner) {
+        $canReview = $user->can('reports.review');
+        if (! user_can_access_study($user, $study)) {
             return redirect()->to('/studies')->with('error', 'Sin permiso para descargar.');
         }
 
@@ -353,7 +434,8 @@ class ReportController extends BaseController
 
         $isAdmin  = $user->can('users.manage');
         $isAuthor = $user->can('reports.review') && (int) ($report['doctor_user_id'] ?? 0) === (int) $user->id;
-        if (! $isAdmin && ! $isAuthor) {
+        $study    = model(StudyModel::class)->findByStudyUid($studyUid);
+        if ((! $isAdmin && ! $isAuthor) || ! user_can_access_study($user, $study)) {
             return redirect()->to('/reports')->with('error', 'Sin permiso para eliminar este informe.');
         }
 
@@ -372,5 +454,70 @@ class ReportController extends BaseController
             : '/reports';
 
         return redirect()->to($target)->with('message', 'Informe eliminado.');
+    }
+
+    /////////////////////////////////////////////////////////////////////////////
+    // Transcribe audio de dictado médico usando el servicio Whisper local.    //
+    /////////////////////////////////////////////////////////////////////////////
+    public function transcribe(): ResponseInterface
+    {
+        if (! auth()->user()?->can('reports.review')) {
+            return $this->response->setStatusCode(403)->setJSON([
+                'error'     => 'Sin permiso para transcribir informes.',
+                'csrf_hash' => csrf_hash(),
+            ]);
+        }
+
+        $file = $this->request->getFile('audio');
+        if ($file === null || ! $file->isValid() || $file->getSize() <= 0) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'error'     => 'No se recibió un archivo de audio válido.',
+                'csrf_hash' => csrf_hash(),
+            ]);
+        }
+
+        if ($file->getSize() > 15 * 1024 * 1024) {
+            return $this->response->setStatusCode(413)->setJSON([
+                'error'     => 'El audio supera el límite de 15 MB.',
+                'csrf_hash' => csrf_hash(),
+            ]);
+        }
+
+        $whisperBase = rtrim((string) (env('WHISPER_URL') ?: 'http://whisper:8000'), '/');
+        $mimeType    = $file->getMimeType() ?: 'audio/webm';
+        $origName    = $file->getClientName() ?: 'dictado.webm';
+
+        $ch = curl_init($whisperBase . '/transcribe');
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 60,
+            CURLOPT_CONNECTTIMEOUT => 5,
+            CURLOPT_POSTFIELDS     => [
+                'file'     => new \CURLFile($file->getTempName(), $mimeType, $origName),
+                'language' => 'es',
+            ],
+        ]);
+
+        $raw      = curl_exec($ch);
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr  = curl_error($ch);
+        curl_close($ch);
+
+        if ($raw === false || $httpCode < 200 || $httpCode >= 300) {
+            $detail = $curlErr !== '' ? $curlErr : ('HTTP ' . $httpCode);
+            return $this->response->setStatusCode(502)->setJSON([
+                'error'     => 'No se pudo transcribir con Whisper local (' . $detail . ').',
+                'csrf_hash' => csrf_hash(),
+            ]);
+        }
+
+        $decoded = json_decode($raw, true);
+        $text    = is_array($decoded) ? trim((string) ($decoded['text'] ?? '')) : '';
+
+        return $this->response->setJSON([
+            'text'      => $text,
+            'csrf_hash' => csrf_hash(),
+        ]);
     }
 }

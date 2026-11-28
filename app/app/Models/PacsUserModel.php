@@ -21,6 +21,7 @@ class PacsUserModel extends ShieldUserModel
             'specialty',
             'license_number',
             'signature_file',
+            'center_id',
         ];
     }
 }

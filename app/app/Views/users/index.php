@@ -21,6 +21,7 @@
           <tr>
             <th>Usuario</th>
             <th>Correo</th>
+            <th>Centro</th>
             <th class="text-center">Rol</th>
             <th class="text-center">Estado</th>
             <th class="text-center">Creado</th>
@@ -30,7 +31,7 @@
         <tbody>
           <?php if (empty($users)): ?>
             <tr>
-              <td colspan="6" class="text-center py-4 text-muted">
+              <td colspan="7" class="text-center py-4 text-muted">
                 <div class="py-3">
                   <i class="ti ti-users d-block mb-2 text-muted opacity-75 fs-2-5rem"></i>
                   <span>No hay usuarios registrados.</span>
@@ -49,10 +50,14 @@
               <td>
                 <div class="d-flex align-items-center gap-2">
                   <img src="<?= base_url('assets/images/profile/default-avatar.svg') ?>" class="rounded-circle object-fit-cover flex-shrink-0 round-28" width="28" height="28" alt="user" />
-                  <strong class="fw-semibold text-body"><?= esc($u->full_name ?: $u->username) ?></strong>
+                  <strong class="fw-semibold text-body"><?= esc(mb_strtoupper((string) ($u->full_name ?: $u->username), 'UTF-8')) ?></strong>
                 </div>
               </td>
-              <td class="text-muted"><?= esc($u->email) ?></td>
+              <td class="text-muted"><?= esc(mb_strtolower((string) $u->email, 'UTF-8')) ?></td>
+              <td class="text-muted">
+                <?php $uCenterId = ! empty($u->center_id) ? (int) $u->center_id : null; ?>
+                <?= $uCenterId !== null && isset($centersById[$uCenterId]) ? esc(mb_strtoupper($centersById[$uCenterId], 'UTF-8')) : 'TODOS' ?>
+              </td>
               <td class="text-center">
                 <span class="badge <?= $badge ?> fw-semibold"><?= esc($roleLabel) ?></span>
               </td>
@@ -119,8 +124,12 @@
             <div class="d-flex align-items-center gap-3">
               <img src="<?= base_url('assets/images/profile/default-avatar.svg') ?>" class="rounded-circle object-fit-cover flex-shrink-0" width="38" height="38" alt="user" />
               <div>
-                <strong class="d-block fw-semibold text-body"><?= esc($u->full_name ?: $u->username) ?></strong>
-                <span class="text-muted small d-block mb-1"><?= esc($u->email) ?></span>
+                <strong class="d-block fw-semibold text-body"><?= esc(mb_strtoupper((string) ($u->full_name ?: $u->username), 'UTF-8')) ?></strong>
+                <span class="text-muted small d-block mb-1"><?= esc(mb_strtolower((string) $u->email, 'UTF-8')) ?></span>
+                <?php $mCenterId = ! empty($u->center_id) ? (int) $u->center_id : null; ?>
+                <span class="text-muted small d-block mb-1">
+                  <?= $mCenterId !== null && isset($centersById[$mCenterId]) ? esc(mb_strtoupper($centersById[$mCenterId], 'UTF-8')) : 'TODOS' ?>
+                </span>
                 <span class="badge <?= $badge ?> fw-semibold"><?= esc($roleLabel) ?></span>
               </div>
             </div>

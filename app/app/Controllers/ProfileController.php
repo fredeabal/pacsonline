@@ -80,12 +80,12 @@ class ProfileController extends BaseController
         $user->email     = $data['email'];
         $user->full_name = ($data['full_name'] ?? '') ?: null;
 
-        if ($user->can('reports.review')) {
+        if ($user->inGroup('medico')) {
             $user->specialty      = ($data['specialty'] ?? '') ?: null;
             $user->license_number = ($data['license_number'] ?? '') ?: null;
         }
 
-        if ($file !== null && $file->isValid()) {
+        if ($user->inGroup('medico') && $file !== null && $file->isValid()) {
             $dir = WRITEPATH . 'uploads/signatures';
             if (! is_dir($dir)) {
                 mkdir($dir, 0775, true);

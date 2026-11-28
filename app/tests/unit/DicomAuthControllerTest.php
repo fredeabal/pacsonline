@@ -70,18 +70,33 @@ final class DicomAuthControllerTest extends CIUnitTestCase
         $revokedResult->assertStatus(401);
     }
 
-    public function testPatientCannotQueryAllStudiesWithoutUid(): void
+    public function testCenterScopedUserCannotQueryAllStudiesAndOnlyViewsOwnCenter(): void
     {
-        $users   = auth()->getProvider();
-        $patient = new User([
-            'username' => 'pac_dicom_test',
-            'email'    => 'pac_dicom_test@example.com',
-            'password' => 'Secret123!',
+        $centerId1 = (int) model(\App\Models\MedicalCenterModel::class)->insert([
+            'name'           => 'Clinica Centro 1',
+            'ae_title'       => 'CENTRO1',
+            'api_token_hash' => hash('sha256', 'tok_c1'),
+            'active'         => 1,
+        ], true);
+
+        $centerId2 = (int) model(\App\Models\MedicalCenterModel::class)->insert([
+            'name'           => 'Clinica Centro 2',
+            'ae_title'       => 'CENTRO2',
+            'api_token_hash' => hash('sha256', 'tok_c2'),
+            'active'         => 1,
+        ], true);
+
+        $users      = auth()->getProvider();
+        $scopedUser = new User([
+            'username'  => 'obs_centro_test',
+            'email'     => 'obs_centro_test@example.com',
+            'password'  => 'Secret123!',
+            'center_id' => $centerId1,
         ]);
-        $users->save($patient);
+        $users->save($scopedUser);
         $saved = $users->findById($users->getInsertID());
         $saved->activate();
-        $saved->addGroup('paciente');
+        $saved->addGroup('observador');
 
         $ownUid   = '1.2.826.0.1.3680043.77.1';
         $otherUid = '1.2.826.0.1.3680043.77.2';
@@ -89,8 +104,15 @@ final class DicomAuthControllerTest extends CIUnitTestCase
         model(StudyModel::class)->insert([
             'orthanc_id'         => 'orthanc-77-1',
             'study_instance_uid' => $ownUid,
-            'owner_user_id'      => (int) $saved->id,
-            'patient_name'       => 'Paciente Test',
+            'center_id'          => $centerId1,
+            'patient_name'       => 'Paciente Centro 1',
+        ]);
+
+        model(StudyModel::class)->insert([
+            'orthanc_id'         => 'orthanc-77-2',
+            'study_instance_uid' => $otherUid,
+            'center_id'          => $centerId2,
+            'patient_name'       => 'Paciente Centro 2',
         ]);
 
         auth()->login($saved);

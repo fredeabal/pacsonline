@@ -73,6 +73,7 @@ $routes->group('', ['filter' => 'session'], static function ($routes) {
     $routes->get('reports/edit/(:segment)', [ReportController::class, 'edit']);
     $routes->post('reports/save/(:segment)', [ReportController::class, 'save']);
     $routes->post('reports/delete/(:segment)', [ReportController::class, 'delete']);
+    $routes->post('reports/transcribe', [ReportController::class, 'transcribe']);
     $routes->get('reports/pdf/(:segment)', [ReportController::class, 'pdf']);
 
     // Plantillas personales por médico

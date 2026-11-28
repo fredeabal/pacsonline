@@ -22,8 +22,9 @@ class DicomAuthController extends BaseController
 
         // 1. Usuario autenticado en el portal
         if (auth()->loggedIn()) {
-            $user = auth()->user();
-            if ($user !== null && $user->can('studies.view_all')) {
+            $user           = auth()->user();
+            $scopedCenterId = user_center_id($user);
+            if ($user !== null && $scopedCenterId === null && $user->can('studies.view_all')) {
                 return $this->response->setStatusCode(200);
             }
 
@@ -33,7 +34,7 @@ class DicomAuthController extends BaseController
             }
 
             $study = model(StudyModel::class)->findByStudyUid($requestedUid);
-            if ($study !== null && (int) $study['owner_user_id'] === (int) auth()->id()) {
+            if (user_can_access_study($user, $study)) {
                 return $this->response->setStatusCode(200);
             }
 

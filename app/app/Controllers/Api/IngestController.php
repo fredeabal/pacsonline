@@ -49,7 +49,7 @@ class IngestController extends BaseController
             return $this->response->setStatusCode(400)->setJSON(['error' => 'Archivo DICOM vacío.']);
         }
 
-        $orthanc = new OrthancClient();
+        $orthanc = $this->createOrthancClient();
         $result  = $orthanc->uploadDicom($payload);
 
         if (! $result['ok']) {
@@ -68,21 +68,46 @@ class IngestController extends BaseController
                 $studyUid   = $info['MainDicomTags']['StudyInstanceUID'] ?? null;
                 $studyModel = model(StudyModel::class);
 
-                if ($studyUid !== null && $studyModel->findByStudyUid($studyUid) === null) {
-                    $studyModel->insert([
-                        'orthanc_id'         => $orthancId,
-                        'study_instance_uid' => $studyUid,
-                        'owner_user_id'      => null,
-                        'center_id'          => (int) $center['id'],
-                        'patient_name'       => $info['PatientMainDicomTags']['PatientName'] ?? 'Anónimo',
-                        'study_description'  => $info['MainDicomTags']['StudyDescription'] ?? 'Sin descripción',
-                        'study_date'         => $info['MainDicomTags']['StudyDate'] ?? null,
-                    ]);
+                if ($studyUid !== null) {
+                    $existing = $studyModel->findByStudyUid($studyUid);
 
-                    $centerModel->update((int) $center['id'], [
-                        'studies_count' => (int) $center['studies_count'] + 1,
-                        'last_seen_at'  => date('Y-m-d H:i:s'),
-                    ]);
+                    if ($existing === null) {
+                        $studyModel->insert([
+                            'orthanc_id'         => $orthancId,
+                            'study_instance_uid' => $studyUid,
+                            'owner_user_id'      => null,
+                            'center_id'          => (int) $center['id'],
+                            'modality'           => extract_study_modality($info),
+                            'patient_name'       => $info['PatientMainDicomTags']['PatientName'] ?? 'Anónimo',
+                            'study_description'  => $info['MainDicomTags']['StudyDescription'] ?? 'Sin descripción',
+                            'study_date'         => $info['MainDicomTags']['StudyDate'] ?? null,
+                        ]);
+
+                        $centerModel->update((int) $center['id'], [
+                            'studies_count' => (int) $center['studies_count'] + 1,
+                            'last_seen_at'  => date('Y-m-d H:i:s'),
+                        ]);
+                    } else {
+                        $patch = [];
+                        if (empty($existing['center_id'])) {
+                            $patch['center_id'] = (int) $center['id'];
+                        }
+                        if (empty($existing['modality'])) {
+                            $mod = extract_study_modality($info);
+                            if ($mod !== '' && $mod !== 'DICOM') {
+                                $patch['modality'] = $mod;
+                            }
+                        }
+                        if ($patch !== []) {
+                            $studyModel->update((int) $existing['id'], $patch);
+                        }
+
+                        $centerUpdate = ['last_seen_at' => date('Y-m-d H:i:s')];
+                        if (isset($patch['center_id'])) {
+                            $centerUpdate['studies_count'] = (int) $center['studies_count'] + 1;
+                        }
+                        $centerModel->update((int) $center['id'], $centerUpdate);
+                    }
                 } else {
                     $centerModel->update((int) $center['id'], [
                         'last_seen_at' => date('Y-m-d H:i:s'),
@@ -104,5 +129,10 @@ class IngestController extends BaseController
             'center'             => $center['ae_title'],
             'study_instance_uid' => $studyUid,
         ]);
+    }
+
+    protected function createOrthancClient(): OrthancClient
+    {
+        return new OrthancClient();
     }
 }

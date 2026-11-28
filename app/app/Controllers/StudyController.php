@@ -36,9 +36,10 @@ class StudyController extends BaseController
         $patientLinkModel = model(PatientAccessLinkModel::class);
         $reportModel      = model(MedicalReportModel::class);
 
-        $user       = auth()->user();
-        $canViewAll = $user?->can('studies.view_all') ?? false;
-        $userId     = auth()->id();
+        $user           = auth()->user();
+        $scopedCenterId = user_center_id($user);
+        $canViewAll     = $scopedCenterId === null && ($user?->can('studies.view_all') ?? false);
+        $userId         = auth()->id();
 
         $perPage  = 25;
         $page     = max(1, (int) ($this->request->getGet('page') ?? 1));
@@ -68,20 +69,53 @@ class StudyController extends BaseController
             $rawStudies   = $hasNext ? array_slice($fetched, 0, $perPage) : $fetched;
             $totalStudies = ($search === '' && $dateRange === null) ? $orthanc->countStudies() : null;
         } else {
-            $ownedRows = $studyModel
-                ->where('owner_user_id', $userId)
-                ->orderBy('id', 'DESC')
-                ->findAll($perPage + 1, $offset);
-            $hasNext = count($ownedRows) > $perPage;
+            $applyLocalFilters = static function (StudyModel $model) use ($scopedCenterId, $userId, $dateFrom, $dateTo, $search): StudyModel {
+                if ($scopedCenterId !== null) {
+                    $model->where('center_id', $scopedCenterId);
+                } else {
+                    $model->where('owner_user_id', $userId);
+                }
+
+                if ($dateFrom !== '') {
+                    $model->where('study_date >=', str_replace('-', '', $dateFrom));
+                }
+                if ($dateTo !== '') {
+                    $model->where('study_date <=', str_replace('-', '', $dateTo));
+                }
+                if ($search !== '') {
+                    $model->groupStart()
+                        ->like('patient_name', $search, 'both', null, true)
+                        ->orLike('study_description', $search, 'both', null, true)
+                        ->orLike('study_instance_uid', $search, 'both', null, true)
+                        ->groupEnd();
+                }
+
+                return $model;
+            };
+
+            if ($scopedCenterId !== null) {
+                $totalStudies = (int) $applyLocalFilters(model(StudyModel::class))->countAllResults();
+            }
+
+            $listQuery = $applyLocalFilters(model(StudyModel::class));
+            if ($scopedCenterId !== null) {
+                $listQuery->orderBy('study_date', 'DESC')->orderBy('id', 'DESC');
+            } else {
+                $listQuery->orderBy('id', 'DESC');
+            }
+
+            $ownedRows = $listQuery->findAll($perPage + 1, $offset);
+            $hasNext   = count($ownedRows) > $perPage;
             if ($hasNext) {
                 $ownedRows = array_slice($ownedRows, 0, $perPage);
             }
             foreach ($ownedRows as $row) {
-                $found = $orthanc->findStudyByUid((string) ($row['study_instance_uid'] ?? ''));
-                if ($found === null || ! study_matches_date_range($found, $dateFrom, $dateTo)) {
-                    continue;
+                $orthancId = trim((string) ($row['orthanc_id'] ?? ''));
+                $found     = $orthancId !== '' ? $orthanc->getStudy($orthancId) : null;
+                if ($found === null) {
+                    $found = $orthanc->findStudyByUid((string) ($row['study_instance_uid'] ?? ''));
                 }
-                if ($search !== '' && ! $this->studyMatchesText($found, $search)) {
+                if ($found === null) {
                     continue;
                 }
                 $rawStudies[] = $found;
@@ -97,6 +131,7 @@ class StudyController extends BaseController
         }
 
         $recordsByUid      = $studyModel->mapByStudyUids($uids);
+        $rawStudies        = $studyModel->resolveAndPersistModalities($orthanc, $rawStudies, $recordsByUid);
         $reportsByUid      = $reportModel->mapByStudyUids($uids);
         $patientLinksByUid = $patientLinkModel->countActiveByStudyUids($uids);
 
@@ -138,13 +173,18 @@ class StudyController extends BaseController
             return redirect()->to('/studies')->with('error', 'Sin permiso para subir estudios.');
         }
 
-        $doctors = $this->usersByGroups(['medico', 'admin']);
-        $centers = model(MedicalCenterModel::class)->where('active', 1)->orderBy('name', 'ASC')->findAll();
+        $scopedCenterId = user_center_id();
+        $doctors        = $this->usersByGroups(['medico']);
+        $centerModel    = model(MedicalCenterModel::class);
+        $centers        = $scopedCenterId !== null
+            ? $centerModel->where('id', $scopedCenterId)->findAll()
+            : $centerModel->where('active', 1)->orderBy('name', 'ASC')->findAll();
 
         return view('studies/upload', [
-            'title'   => 'Subir Estudio | PACS Online',
-            'doctors' => $doctors,
-            'centers' => $centers,
+            'title'          => 'Subir Estudio | PACS Online',
+            'doctors'        => $doctors,
+            'centers'        => $centers,
+            'lockedCenterId' => $scopedCenterId,
         ]);
     }
 
@@ -185,9 +225,10 @@ class StudyController extends BaseController
             return redirect()->back()->with('error', 'Archivo no válido.');
         }
 
-        $post        = $this->validator->getValidated();
-        $centerId    = ! empty($post['center_id']) ? (int) $post['center_id'] : null;
-        $doctorId    = ! empty($post['assigned_doctor_id']) ? (int) $post['assigned_doctor_id'] : null;
+        $post           = $this->validator->getValidated();
+        $scopedCenterId = user_center_id();
+        $centerId       = $scopedCenterId ?? (! empty($post['center_id']) ? (int) $post['center_id'] : null);
+        $doctorId       = ! empty($post['assigned_doctor_id']) ? (int) $post['assigned_doctor_id'] : null;
         $priority    = $post['priority'] ?: 'normal';
         $createdNote = '';
 
@@ -278,6 +319,7 @@ class StudyController extends BaseController
                 'orthanc_id'         => $data['orthanc_id'],
                 'study_instance_uid' => $uid,
                 'owner_user_id'      => $patientId,
+                'modality'           => $info !== null ? extract_study_modality($info) : null,
                 'patient_name'       => $info['PatientMainDicomTags']['PatientName'] ?? 'Anónimo',
                 'study_description'  => $info['MainDicomTags']['StudyDescription'] ?? 'Sin descripción',
                 'study_date'         => $info['MainDicomTags']['StudyDate'] ?? null,
@@ -299,11 +341,8 @@ class StudyController extends BaseController
             return redirect()->to('/login');
         }
 
-        $study      = model(StudyModel::class)->findByStudyUid($studyUid);
-        $canViewAll = $user->can('studies.view_all');
-        $isOwner    = $study !== null && (int) $study['owner_user_id'] === (int) $user->id;
-
-        if (! $canViewAll && ! $isOwner) {
+        $study = model(StudyModel::class)->findByStudyUid($studyUid);
+        if (! user_can_access_study($user, $study)) {
             return redirect()->to('/studies')->with('error', 'Sin permiso para descargar.');
         }
 
@@ -363,11 +402,12 @@ class StudyController extends BaseController
             return redirect()->to('/login');
         }
 
-        $study      = model(StudyModel::class)->findByStudyUid($studyUid);
-        $canViewAll = $user->can('studies.view_all');
-        $isOwner    = $study !== null && (int) $study['owner_user_id'] === (int) $user->id;
+        $study          = model(StudyModel::class)->findByStudyUid($studyUid);
+        $scopedCenterId = user_center_id($user);
+        $canViewAll     = $scopedCenterId === null && $user->can('studies.view_all');
+        $isOwner        = $study !== null && (int) $study['owner_user_id'] === (int) $user->id;
 
-        if (! $canViewAll && ! $isOwner) {
+        if (! user_can_access_study($user, $study)) {
             return redirect()->to('/studies')->with('error', 'Sin permiso para ver este caso.');
         }
 
@@ -411,12 +451,22 @@ class StudyController extends BaseController
 
         $canAssign = $user->can('studies.assign');
         $canSend   = $user->can('studies.send');
-        $doctors   = $canAssign ? $this->usersByGroups(['medico', 'admin']) : [];
+        $doctors   = $canAssign ? $this->usersByGroups(['medico']) : [];
 
         $attachments  = model(StudyAttachmentModel::class)->forStudy($studyUid);
         $report       = model(MedicalReportModel::class)->findByStudyUid($studyUid);
         $studySeries  = $orthancStudyInfo !== null ? $orthanc->getStudySeries($orthancStudyInfo) : [];
         $dicomDocs    = $orthancStudyInfo !== null ? $orthanc->findStudyDicomDocuments($orthancStudyInfo, $studySeries) : [];
+        $priorStudies = (new \App\Libraries\PriorStudiesService())->findForStudy(
+            $orthanc,
+            (string) ($study['patient_id'] ?? ''),
+            $studyUid,
+            $canViewAll,
+            $user->can('reports.review'),
+            (int) $user->id,
+            15,
+            $scopedCenterId
+        );
 
         $accession   = trim((string) ($orthancStudyInfo['MainDicomTags']['AccessionNumber'] ?? ''));
         $dicomStudyId = trim((string) ($orthancStudyInfo['MainDicomTags']['StudyID'] ?? ''));
@@ -442,9 +492,13 @@ class StudyController extends BaseController
             'doctors'            => $doctors,
             'attachments'        => $attachments,
             'dicomDocs'          => $dicomDocs,
+            'priorStudies'       => $priorStudies,
             'report'             => $report,
             'isOwner'            => $isOwner,
             'canEditCaseContent' => $canAssign,
+            'centers'            => ($canAssign && $scopedCenterId === null)
+                ? model(\App\Models\MedicalCenterModel::class)->where('active', 1)->orderBy('name', 'ASC')->findAll()
+                : [],
             'sendableNodes'      => $canSend
                 ? model(\App\Models\MedicalCenterModel::class)->findSendable()
                 : [],
@@ -456,7 +510,8 @@ class StudyController extends BaseController
     /////////////////////////////////////////////////////////////////////////////
     public function updateCase(string $studyUid): RedirectResponse
     {
-        if (! auth()->user()?->can('studies.assign')) {
+        $user = auth()->user();
+        if ($user === null || ! $user->can('studies.assign')) {
             return redirect()->to('/studies')->with('error', 'Sin permiso para editar.');
         }
 
@@ -467,6 +522,10 @@ class StudyController extends BaseController
             ],
             'assigned_doctor_id' => [
                 'label' => 'Médico',
+                'rules' => 'permit_empty|integer',
+            ],
+            'center_id' => [
+                'label' => 'Centro',
                 'rules' => 'permit_empty|integer',
             ],
             'priority' => [
@@ -483,6 +542,10 @@ class StudyController extends BaseController
         $studyModel = model(StudyModel::class);
         $record     = $studyModel->findByStudyUid($studyUid);
 
+        if (! user_can_access_study($user, $record)) {
+            return redirect()->to('/studies')->with('error', 'Sin permiso para editar este caso.');
+        }
+
         $previousDoctorId = (int) ($record['assigned_doctor_id'] ?? 0);
         $newDoctorId      = ! empty($data['assigned_doctor_id']) ? (int) $data['assigned_doctor_id'] : null;
 
@@ -490,6 +553,10 @@ class StudyController extends BaseController
             'assigned_doctor_id' => $newDoctorId,
             'priority'           => $data['priority'],
         ];
+
+        if (user_center_id($user) === null && array_key_exists('center_id', $this->request->getPost())) {
+            $updateData['center_id'] = ! empty($data['center_id']) ? (int) $data['center_id'] : null;
+        }
 
         if ($record !== null) {
             $studyModel->update((int) $record['id'], $updateData);
@@ -499,6 +566,7 @@ class StudyController extends BaseController
             $studyModel->insert(array_merge($updateData, [
                 'orthanc_id'         => $data['orthanc_id'] ?: '',
                 'study_instance_uid' => $studyUid,
+                'modality'           => $info !== null ? extract_study_modality($info) : null,
                 'patient_name'       => $info['PatientMainDicomTags']['PatientName'] ?? 'Anónimo',
                 'study_description'  => $info['MainDicomTags']['StudyDescription'] ?? 'Sin descripción',
                 'study_date'         => $info['MainDicomTags']['StudyDate'] ?? null,
@@ -544,14 +612,26 @@ class StudyController extends BaseController
                 ->with('error', 'No se encontró el estudio en Orthanc para editar.');
         }
 
-        $pTags = is_array($info['PatientMainDicomTags'] ?? null) ? $info['PatientMainDicomTags'] : [];
-        $sTags = is_array($info['MainDicomTags'] ?? null) ? $info['MainDicomTags'] : [];
+        $pTags   = is_array($info['PatientMainDicomTags'] ?? null) ? $info['PatientMainDicomTags'] : [];
+        $sTags   = is_array($info['MainDicomTags'] ?? null) ? $info['MainDicomTags'] : [];
+        $centers = model(MedicalCenterModel::class)->where('active', 1)->orderBy('name', 'ASC')->findAll();
+
+        $institutionName = trim((string) ($sTags['InstitutionName'] ?? ''));
+        if ($institutionName === '' && ! empty($record['center_id'])) {
+            foreach ($centers as $c) {
+                if ((int) $c['id'] === (int) $record['center_id']) {
+                    $institutionName = (string) $c['name'];
+                    break;
+                }
+            }
+        }
 
         return view('studies/dicom_edit', [
-            'title'      => 'Editar datos DICOM | PACS Online',
-            'studyUid'   => $studyUid,
-            'orthancId'  => $orthancId,
-            'dicom'      => [
+            'title'     => 'Editar datos DICOM | PACS Online',
+            'studyUid'  => $studyUid,
+            'orthancId' => $orthancId,
+            'centers'   => $centers,
+            'dicom'     => [
                 'patient_name'             => (string) ($pTags['PatientName'] ?? ($record['patient_name'] ?? '')),
                 'patient_id'               => (string) ($pTags['PatientID'] ?? ''),
                 'patient_birth_date'       => $this->formatDicomBirthDateForInput((string) ($pTags['PatientBirthDate'] ?? '')),
@@ -560,7 +640,7 @@ class StudyController extends BaseController
                 'study_date'               => $this->formatDicomBirthDateForInput((string) ($sTags['StudyDate'] ?? ($record['study_date'] ?? ''))),
                 'accession_number'         => (string) ($sTags['AccessionNumber'] ?? ''),
                 'referring_physician_name' => (string) ($sTags['ReferringPhysicianName'] ?? ''),
-                'institution_name'         => (string) ($sTags['InstitutionName'] ?? ''),
+                'institution_name'         => $institutionName,
             ],
         ]);
     }
@@ -728,17 +808,32 @@ class StudyController extends BaseController
         $finalStudyDesc = $newDesc !== '' ? $newDesc : ($info['MainDicomTags']['StudyDescription'] ?? 'Sin descripción');
         $finalStudyDate = $studyTags['StudyDate'] ?? ($info['MainDicomTags']['StudyDate'] ?? null);
 
+        $matchedCenterId = null;
+        if ($newInst !== '') {
+            foreach (model(MedicalCenterModel::class)->findAll() as $c) {
+                if (mb_strtolower(trim((string) $c['name']), 'UTF-8') === mb_strtolower($newInst, 'UTF-8')) {
+                    $matchedCenterId = (int) $c['id'];
+                    break;
+                }
+            }
+        }
+
         if ($record !== null) {
-            $studyModel->update((int) $record['id'], [
+            $updateRow = [
                 'orthanc_id'        => $newOrthancId,
                 'patient_name'      => $newName,
                 'study_description' => $finalStudyDesc,
                 'study_date'        => $finalStudyDate,
-            ]);
+            ];
+            if ($matchedCenterId !== null) {
+                $updateRow['center_id'] = $matchedCenterId;
+            }
+            $studyModel->update((int) $record['id'], $updateRow);
         } else {
             $studyModel->insert([
                 'orthanc_id'         => $newOrthancId,
                 'study_instance_uid' => $studyUid,
+                'center_id'          => $matchedCenterId,
                 'patient_name'       => $newName,
                 'study_description'  => $finalStudyDesc,
                 'study_date'         => $finalStudyDate,
@@ -789,7 +884,7 @@ class StudyController extends BaseController
         $record     = $studyModel->findByStudyUid($studyUid);
         $isOwner    = $record !== null && (int) $record['owner_user_id'] === (int) $user->id;
 
-        if (! $user->can('studies.assign')) {
+        if (! $user->can('studies.assign') || ! user_can_access_study($user, $record)) {
             return redirect()->to('/studies')->with('error', 'Sin permiso para editar notas.');
         }
 
@@ -839,7 +934,7 @@ class StudyController extends BaseController
         $study   = model(StudyModel::class)->findByStudyUid($studyUid);
         $isOwner = $study !== null && (int) $study['owner_user_id'] === (int) $user->id;
 
-        if (! $user->can('studies.attachments')) {
+        if (! $user->can('studies.attachments') || ! user_can_access_study($user, $study)) {
             return redirect()->to('/studies')->with('error', 'Sin permiso para adjuntar.');
         }
 
@@ -932,11 +1027,8 @@ class StudyController extends BaseController
             return redirect()->back()->with('error', 'Archivo no encontrado.');
         }
 
-        $study      = model(StudyModel::class)->findByStudyUid($att['study_instance_uid']);
-        $canViewAll = $user->can('studies.view_all');
-        $isOwner    = $study !== null && (int) $study['owner_user_id'] === (int) $user->id;
-
-        if (! $canViewAll && ! $isOwner) {
+        $study = model(StudyModel::class)->findByStudyUid($att['study_instance_uid']);
+        if (! user_can_access_study($user, $study)) {
             return redirect()->to('/studies')->with('error', 'Sin permiso.');
         }
 
@@ -962,11 +1054,8 @@ class StudyController extends BaseController
             return redirect()->to('/login');
         }
 
-        $study      = model(StudyModel::class)->findByStudyUid($studyUid);
-        $canViewAll = $user->can('studies.view_all');
-        $isOwner    = $study !== null && (int) $study['owner_user_id'] === (int) $user->id;
-
-        if (! $canViewAll && ! $isOwner) {
+        $study = model(StudyModel::class)->findByStudyUid($studyUid);
+        if (! user_can_access_study($user, $study)) {
             return redirect()->to('/studies')->with('error', 'Sin permiso.');
         }
 
@@ -1033,7 +1122,7 @@ class StudyController extends BaseController
         $isOwner    = $study !== null && (int) $study['owner_user_id'] === (int) $user->id;
         $isUploader = (int) $att['uploaded_by_user_id'] === (int) $user->id;
 
-        if (! $user->can('studies.delete') && ! ($user->can('reports.review') && $isUploader)) {
+        if ((! $user->can('studies.delete') && ! ($user->can('reports.review') && $isUploader)) || ! user_can_access_study($user, $study)) {
             return redirect()->to('/studies')->with('error', 'Sin permiso para eliminar.');
         }
 
@@ -1060,6 +1149,9 @@ class StudyController extends BaseController
 
         $studyModel = model(StudyModel::class);
         $study      = $studyModel->findByStudyUid($studyUid);
+        if (! user_can_access_study($user, $study)) {
+            return redirect()->to('/studies')->with('error', 'Sin permiso para eliminar este estudio.');
+        }
         $orthancId  = $study['orthanc_id'] ?? null;
         $orthanc    = new OrthancClient();
 
@@ -1119,6 +1211,9 @@ class StudyController extends BaseController
         }
 
         $study     = model(StudyModel::class)->findByStudyUid($studyUid);
+        if (! user_can_access_study($user, $study)) {
+            return $respond(false, 'Sin permiso para enviar este estudio.', 403);
+        }
         $orthancId = $study['orthanc_id'] ?? null;
         $orthanc   = new OrthancClient();
 
@@ -1179,7 +1274,9 @@ class StudyController extends BaseController
         }
 
         $studyModel = model(StudyModel::class);
-        if ($studyModel->findByStudyUid($uid) === null) {
+        $existing   = $studyModel->findByStudyUid($uid);
+
+        if ($existing === null) {
             $studyModel->insert([
                 'orthanc_id'         => $orthancId,
                 'study_instance_uid' => $uid,
@@ -1187,6 +1284,7 @@ class StudyController extends BaseController
                 'center_id'          => $meta['center_id'] ?? null,
                 'assigned_doctor_id' => $meta['assigned_doctor_id'] ?? null,
                 'priority'           => $meta['priority'] ?? 'normal',
+                'modality'           => extract_study_modality($info),
                 'patient_name'       => $info['PatientMainDicomTags']['PatientName'] ?? 'Anónimo',
                 'study_description'  => $info['MainDicomTags']['StudyDescription'] ?? 'Sin descripción',
                 'study_date'         => $info['MainDicomTags']['StudyDate'] ?? null,
@@ -1196,6 +1294,29 @@ class StudyController extends BaseController
                 $savedStudy = $studyModel->findByStudyUid($uid);
                 if ($savedStudy !== null) {
                     (new NotificationService())->sendStudyAssignedEmail($uid, $savedStudy, (int) $meta['assigned_doctor_id']);
+                }
+            }
+        } else {
+            $patch = [];
+            if (empty($existing['center_id']) && ! empty($meta['center_id'])) {
+                $patch['center_id'] = (int) $meta['center_id'];
+            }
+            if (empty($existing['assigned_doctor_id']) && ! empty($meta['assigned_doctor_id'])) {
+                $patch['assigned_doctor_id'] = (int) $meta['assigned_doctor_id'];
+            }
+            if (empty($existing['modality'])) {
+                $mod = extract_study_modality($info);
+                if ($mod !== '' && $mod !== 'DICOM') {
+                    $patch['modality'] = $mod;
+                }
+            }
+            if ($patch !== []) {
+                $studyModel->update((int) $existing['id'], $patch);
+                if (isset($patch['assigned_doctor_id'])) {
+                    $savedStudy = $studyModel->findByStudyUid($uid);
+                    if ($savedStudy !== null) {
+                        (new NotificationService())->sendStudyAssignedEmail($uid, $savedStudy, (int) $patch['assigned_doctor_id']);
+                    }
                 }
             }
         }

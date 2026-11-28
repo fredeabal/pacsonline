@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Models\AuditLogModel;
+use App\Models\MedicalCenterModel;
 use CodeIgniter\HTTP\RedirectResponse;
 use CodeIgniter\Shield\Entities\User;
 
@@ -22,11 +23,16 @@ class UserController extends BaseController
             return redirect()->to('/')->with('error', 'Sin permiso.');
         }
 
-        $users = auth()->getProvider()->orderBy('id', 'DESC')->findAll();
+        $users       = auth()->getProvider()->orderBy('id', 'DESC')->findAll();
+        $centersById = [];
+        foreach (model(MedicalCenterModel::class)->orderBy('name', 'ASC')->findAll() as $center) {
+            $centersById[(int) $center['id']] = (string) $center['name'];
+        }
 
         return view('users/index', [
-            'title' => 'Usuarios y Roles | PACS Online',
-            'users' => $users,
+            'title'       => 'Usuarios y Roles | PACS Online',
+            'users'       => $users,
+            'centersById' => $centersById,
         ]);
     }
 
@@ -39,8 +45,11 @@ class UserController extends BaseController
             return redirect()->to('/')->with('error', 'Sin permiso.');
         }
 
+        $centers = model(MedicalCenterModel::class)->where('active', 1)->orderBy('name', 'ASC')->findAll();
+
         return view('users/create', [
-            'title' => 'Crear Usuario | PACS Online',
+            'title'   => 'Crear Usuario | PACS Online',
+            'centers' => $centers,
         ]);
     }
 
@@ -86,6 +95,10 @@ class UserController extends BaseController
                 'label' => 'Nº de colegiado',
                 'rules' => 'permit_empty|max_length[64]',
             ],
+            'center_id' => [
+                'label' => 'Centro asignado',
+                'rules' => 'permit_empty|integer',
+            ],
         ];
 
         $messages = [
@@ -98,7 +111,12 @@ class UserController extends BaseController
             return redirect()->back()->withInput()->with('errors', $this->validator->getErrors());
         }
 
-        $data  = $this->validator->getValidated();
+        $data     = $this->validator->getValidated();
+        $centerId = $data['role'] === 'admin' ? null : (! empty($data['center_id']) ? (int) $data['center_id'] : null);
+        if ($centerId !== null && model(MedicalCenterModel::class)->find($centerId) === null) {
+            return redirect()->back()->withInput()->with('error', 'El centro seleccionado no existe.');
+        }
+
         $users = auth()->getProvider();
 
         $user = new User([
@@ -106,8 +124,9 @@ class UserController extends BaseController
             'full_name'      => trim((string) ($data['full_name'] ?? '')) ?: null,
             'email'          => $data['email'],
             'password'       => $data['password'],
-            'specialty'      => trim((string) ($data['specialty'] ?? '')) ?: null,
-            'license_number' => trim((string) ($data['license_number'] ?? '')) ?: null,
+            'specialty'      => $data['role'] === 'medico' ? (trim((string) ($data['specialty'] ?? '')) ?: null) : null,
+            'license_number' => $data['role'] === 'medico' ? (trim((string) ($data['license_number'] ?? '')) ?: null) : null,
+            'center_id'      => $centerId,
         ]);
 
         $users->save($user);
@@ -139,9 +158,12 @@ class UserController extends BaseController
             return redirect()->to('/users')->with('error', 'Usuario no encontrado.');
         }
 
+        $centers = model(MedicalCenterModel::class)->orderBy('name', 'ASC')->findAll();
+
         return view('users/edit', [
-            'title' => 'Editar Usuario | PACS Online',
-            'user'  => $user,
+            'title'   => 'Editar Usuario | PACS Online',
+            'user'    => $user,
+            'centers' => $centers,
         ]);
     }
 
@@ -185,6 +207,10 @@ class UserController extends BaseController
                 'label' => 'Nº de colegiado',
                 'rules' => 'permit_empty|max_length[64]',
             ],
+            'center_id' => [
+                'label' => 'Centro asignado',
+                'rules' => 'permit_empty|integer',
+            ],
             'new_password' => [
                 'label' => 'Nueva contraseña',
                 'rules' => 'permit_empty|min_length[6]|max_length[64]',
@@ -206,12 +232,18 @@ class UserController extends BaseController
             return redirect()->back()->withInput()->with('errors', $this->validator->getErrors());
         }
 
-        $data                 = $this->validator->getValidated();
+        $data     = $this->validator->getValidated();
+        $centerId = $data['role'] === 'admin' ? null : (! empty($data['center_id']) ? (int) $data['center_id'] : null);
+        if ($centerId !== null && model(MedicalCenterModel::class)->find($centerId) === null) {
+            return redirect()->back()->withInput()->with('error', 'El centro seleccionado no existe.');
+        }
+
         $user->username       = $data['username'];
         $user->email          = $data['email'];
         $user->full_name      = trim((string) ($data['full_name'] ?? '')) ?: null;
-        $user->specialty      = trim((string) ($data['specialty'] ?? '')) ?: null;
-        $user->license_number = trim((string) ($data['license_number'] ?? '')) ?: null;
+        $user->specialty      = $data['role'] === 'medico' ? (trim((string) ($data['specialty'] ?? '')) ?: null) : null;
+        $user->license_number = $data['role'] === 'medico' ? (trim((string) ($data['license_number'] ?? '')) ?: null) : null;
+        $user->center_id      = $centerId;
         $user->active         = $this->request->getPost('active') ? 1 : 0;
 
         if (! empty($data['new_password'])) {

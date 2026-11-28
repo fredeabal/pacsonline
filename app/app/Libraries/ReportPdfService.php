@@ -31,15 +31,33 @@ class ReportPdfService
             || empty($study['patient_name'])
             || empty($study['study_date'])
             || empty($study['study_description'])
+            || empty($study['study_number'])
+            || empty($study['referring_physician'])
         ) {
             $orthancStudy = (new OrthancClient())->findStudyByUid($studyUid);
             if ($orthancStudy !== null) {
                 $tags    = $orthancStudy['MainDicomTags'] ?? [];
                 $patient = $orthancStudy['PatientMainDicomTags'] ?? [];
                 $study   = $study ?? [];
-                $study['patient_name']      = ! empty($study['patient_name']) ? $study['patient_name'] : ($patient['PatientName'] ?? null);
-                $study['study_date']        = ! empty($study['study_date']) ? $study['study_date'] : ($tags['StudyDate'] ?? null);
-                $study['study_description'] = ! empty($study['study_description']) ? $study['study_description'] : ($tags['StudyDescription'] ?? null);
+                $study['patient_name']        = ! empty($study['patient_name']) ? $study['patient_name'] : ($patient['PatientName'] ?? null);
+                $study['study_date']          = ! empty($study['study_date']) ? $study['study_date'] : ($tags['StudyDate'] ?? null);
+                $study['study_description']   = ! empty($study['study_description']) ? $study['study_description'] : ($tags['StudyDescription'] ?? null);
+                if (empty($study['study_number'])) {
+                    $accession = trim((string) ($tags['AccessionNumber'] ?? ''));
+                    $studyId   = trim((string) ($tags['StudyID'] ?? ''));
+                    $study['study_number'] = $accession !== '' ? $accession : ($studyId !== '' ? $studyId : null);
+                }
+                if (empty($study['referring_physician'])) {
+                    $ref = trim((string) ($tags['ReferringPhysicianName'] ?? ''));
+                    $study['referring_physician'] = $ref !== '' ? $ref : null;
+                }
+            }
+        }
+
+        if (empty($study['center_name']) && ! empty($study['center_id'])) {
+            $center = model(\App\Models\MedicalCenterModel::class)->find((int) $study['center_id']);
+            if (! empty($center['name'])) {
+                $study['center_name'] = (string) $center['name'];
             }
         }
 
@@ -71,23 +89,23 @@ class ReportPdfService
             }
         }
 
-        $letterheadDataUri = null;
-        $letterheadPath    = FCPATH . 'assets/images/carema_letterhead.png';
-        if (is_file($letterheadPath)) {
-            $rawLetterhead = file_get_contents($letterheadPath);
-            if ($rawLetterhead !== false) {
-                $letterheadDataUri = 'data:image/png;base64,' . base64_encode($rawLetterhead);
+        $pacslineLogoDataUri = null;
+        $pacslineLogoPath    = FCPATH . 'assets/images/logos/pacs_line_logo_pdf.png';
+        if (is_file($pacslineLogoPath)) {
+            $rawLogo = file_get_contents($pacslineLogoPath);
+            if ($rawLogo !== false) {
+                $pacslineLogoDataUri = 'data:image/png;base64,' . base64_encode($rawLogo);
             }
         }
 
         $html = view('reports/pdf', [
-            'studyUid'          => $studyUid,
-            'study'             => $study,
-            'report'            => $report,
-            'doctor'            => $doctor,
-            'qrDataUri'         => $qrDataUri,
-            'signatureDataUri'  => $signatureDataUri,
-            'letterheadDataUri' => $letterheadDataUri,
+            'studyUid'            => $studyUid,
+            'study'               => $study,
+            'report'              => $report,
+            'doctor'              => $doctor,
+            'qrDataUri'           => $qrDataUri,
+            'signatureDataUri'    => $signatureDataUri,
+            'pacslineLogoDataUri' => $pacslineLogoDataUri,
         ]);
 
         $options = new Options();
@@ -97,6 +115,17 @@ class ReportPdfService
         $dompdf->loadHtml($html);
         $dompdf->setPaper('A4', 'portrait');
         $dompdf->render();
+
+        $canvas      = $dompdf->getCanvas();
+        $fontMetrics = $dompdf->getFontMetrics();
+        $font        = $fontMetrics->getFont('DejaVu Sans', 'normal');
+        $leftText    = 'pacsline · Informe médico de diagnóstico por imagen';
+        $pageText    = 'Página {PAGE_NUM} de {PAGE_COUNT}';
+        $pageWidth   = $fontMetrics->getTextWidth('Página 1 de 1', $font, 7.5);
+        $rightX      = $canvas->get_width() - 36 - $pageWidth;
+
+        $canvas->page_text(36, 814, $leftText, $font, 7.5, [0.58, 0.64, 0.72]);
+        $canvas->page_text($rightX, 814, $pageText, $font, 7.5, [0.58, 0.64, 0.72]);
 
         return $dompdf->output();
     }

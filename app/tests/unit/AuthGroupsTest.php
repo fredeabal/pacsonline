@@ -13,11 +13,12 @@ final class AuthGroupsTest extends CIUnitTestCase
     {
         $config = new AuthGroups();
 
-        $this->assertSame('paciente', $config->defaultGroup);
+        $this->assertSame('observador', $config->defaultGroup);
         $this->assertArrayHasKey('admin', $config->groups);
         $this->assertArrayHasKey('medico', $config->groups);
-        $this->assertArrayHasKey('paciente', $config->groups);
-        $this->assertCount(3, $config->groups);
+        $this->assertArrayHasKey('usuario', $config->groups);
+        $this->assertArrayHasKey('observador', $config->groups);
+        $this->assertCount(4, $config->groups);
     }
 
     public function testMedicoOnlyReviewsAndNeverUploadsOrManagesUsers(): void
@@ -32,15 +33,16 @@ final class AuthGroupsTest extends CIUnitTestCase
         $this->assertNotContains('settings.manage', $matrix);
     }
 
-    public function testPacienteOnlyViewsOwn(): void
+    public function testObservadorOnlyViewsAndNeverEditsOrUploads(): void
     {
         $config = new AuthGroups();
-        $matrix = $config->matrix['paciente'];
+        $matrix = $config->matrix['observador'];
 
         $this->assertContains('studies.view', $matrix);
         $this->assertContains('reports.view_own', $matrix);
-        $this->assertNotContains('studies.view_all', $matrix);
         $this->assertNotContains('studies.upload', $matrix);
+        $this->assertNotContains('studies.delete', $matrix);
         $this->assertNotContains('reports.review', $matrix);
+        $this->assertNotContains('users.manage', $matrix);
     }
 }

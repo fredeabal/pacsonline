@@ -42,15 +42,20 @@
 
       <div class="row g-3 mb-4">
         <div class="col-md-4">
-          <label for="center_id" class="form-label fw-semibold">Centro médico remitente (opcional)</label>
-          <select class="form-select" id="center_id" name="center_id">
-            <option value="">-- Subida directa / Sin centro --</option>
+          <label for="center_id" class="form-label fw-semibold">Centro médico remitente<?= empty($lockedCenterId) ? ' (opcional)' : '' ?></label>
+          <select class="form-select" id="center_id" name="center_id" <?= ! empty($lockedCenterId) ? 'disabled' : '' ?>>
+            <?php if (empty($lockedCenterId)): ?>
+              <option value="">-- Subida directa / Sin centro --</option>
+            <?php endif; ?>
             <?php foreach ($centers as $c): ?>
-              <option value="<?= (int) $c['id'] ?>" <?= old('center_id') == $c['id'] ? 'selected' : '' ?>>
+              <option value="<?= (int) $c['id'] ?>" <?= ((string) old('center_id', (string) ($lockedCenterId ?? '')) === (string) $c['id']) ? 'selected' : '' ?>>
                 <?= esc($c['name']) ?> (<?= esc($c['ae_title']) ?>)
               </option>
             <?php endforeach; ?>
           </select>
+          <?php if (! empty($lockedCenterId)): ?>
+            <input type="hidden" name="center_id" value="<?= (int) $lockedCenterId ?>">
+          <?php endif; ?>
         </div>
 
         <div class="col-md-4">

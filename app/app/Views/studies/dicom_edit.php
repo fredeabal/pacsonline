@@ -87,7 +87,29 @@
             </div>
             <div>
               <label for="dicom_institution_name" class="form-label fw-semibold">Centro / Institución</label>
-              <input type="text" class="form-control" id="dicom_institution_name" name="institution_name" value="<?= esc($institution) ?>" maxlength="120">
+              <?php
+                $centersList     = $centers ?? [];
+                $matchedInList   = false;
+                foreach ($centersList as $c) {
+                    if (mb_strtolower(trim((string) $c['name']), 'UTF-8') === mb_strtolower(trim((string) $institution), 'UTF-8')) {
+                        $matchedInList = true;
+                        break;
+                    }
+                }
+              ?>
+              <select class="form-select" id="dicom_institution_name" name="institution_name">
+                <option value="">-- Sin centro especificado --</option>
+                <?php if (trim((string) $institution) !== '' && ! $matchedInList): ?>
+                  <option value="<?= esc($institution, 'attr') ?>" selected>
+                    <?= esc($institution) ?> (Actual en DICOM)
+                  </option>
+                <?php endif; ?>
+                <?php foreach ($centersList as $c): ?>
+                  <option value="<?= esc($c['name'], 'attr') ?>" <?= mb_strtolower(trim((string) $c['name']), 'UTF-8') === mb_strtolower(trim((string) $institution), 'UTF-8') ? 'selected' : '' ?>>
+                    <?= esc($c['name']) ?> (<?= esc($c['ae_title']) ?>)
+                  </option>
+                <?php endforeach; ?>
+              </select>
             </div>
           </div>
         </div>

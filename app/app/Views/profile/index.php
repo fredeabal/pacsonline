@@ -1,8 +1,9 @@
 <?= view('template/header') ?>
 
+<?php $isDoctorProfile = $user->inGroup('medico'); ?>
 <div class="card mb-4">
   <div class="card-header bg-primary-subtle">
-    <h5 class="mb-0 text-primary fw-semibold">Datos personales y firma médica</h5>
+    <h5 class="mb-0 text-primary fw-semibold"><?= $isDoctorProfile ? 'Datos personales y firma médica' : 'Datos personales' ?></h5>
   </div>
 
   <div class="card-body">
@@ -23,7 +24,7 @@
           <input type="text" class="form-control" id="full_name" name="full_name" placeholder="Ej: Dra. Laura Martínez" value="<?= esc(old('full_name', $user->full_name ?? '')) ?>">
         </div>
 
-        <?php if ($user->can('reports.review')): ?>
+        <?php if ($isDoctorProfile): ?>
           <div class="col-md-6">
             <label for="specialty" class="form-label fw-semibold">Especialidad</label>
             <input type="text" class="form-control" id="specialty" name="specialty" placeholder="Ej: Radiodiagnóstico" value="<?= esc(old('specialty', $user->specialty ?? '')) ?>">

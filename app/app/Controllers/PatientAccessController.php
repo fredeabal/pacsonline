@@ -26,7 +26,7 @@ class PatientAccessController extends BaseController
     /////////////////////////////////////////////////////////////////////////////
     public function manage(string $studyUid): string|RedirectResponse
     {
-        if (! $this->canManagePatientAccess()) {
+        if (! $this->canManagePatientAccess($studyUid)) {
             return redirect()->to('/studies')->with('error', 'Sin permiso para gestionar accesos de pacientes.');
         }
 
@@ -54,7 +54,7 @@ class PatientAccessController extends BaseController
     /////////////////////////////////////////////////////////////////////////////
     public function createForm(string $studyUid): string|RedirectResponse
     {
-        if (! $this->canManagePatientAccess()) {
+        if (! $this->canManagePatientAccess($studyUid)) {
             return redirect()->to('/studies')->with('error', 'Sin permiso para generar accesos de pacientes.');
         }
 
@@ -112,6 +112,9 @@ class PatientAccessController extends BaseController
 
         $data       = $this->validator->getValidated();
         $studyUid   = (string) $data['study_instance_uid'];
+        if (! $this->canManagePatientAccess($studyUid)) {
+            return redirect()->to('/studies')->with('error', 'Sin permiso para generar accesos de pacientes para este estudio.');
+        }
         $normId     = PatientAccessLinkModel::normalizePatientId((string) $data['patient_id']);
         $normBirth  = PatientAccessLinkModel::normalizeBirthDate((string) $data['patient_birth_date']);
 
@@ -187,6 +190,10 @@ class PatientAccessController extends BaseController
             return redirect()->to('/studies')->with('error', 'Enlace no encontrado.');
         }
 
+        if (! $this->canManagePatientAccess((string) $link['study_instance_uid'])) {
+            return redirect()->to('/studies')->with('error', 'Sin permiso para editar enlaces de otro centro.');
+        }
+
         if (! empty($link['revoked_at'])) {
             return redirect()->to('/studies/patient-access/' . urlencode((string) $link['study_instance_uid']))
                 ->with('error', 'No se puede editar un enlace revocado.');
@@ -216,6 +223,10 @@ class PatientAccessController extends BaseController
         $link  = $model->find($linkId);
         if ($link === null) {
             return redirect()->to('/studies')->with('error', 'Enlace no encontrado.');
+        }
+
+        if (! $this->canManagePatientAccess((string) $link['study_instance_uid'])) {
+            return redirect()->to('/studies')->with('error', 'Sin permiso para editar enlaces de otro centro.');
         }
 
         if (! empty($link['revoked_at'])) {
@@ -288,6 +299,10 @@ class PatientAccessController extends BaseController
 
         if ($link === null || ! $model->isStillActive($linkId)) {
             return redirect()->back()->with('error', 'El enlace no existe o ya no está activo.');
+        }
+
+        if (! $this->canManagePatientAccess((string) $link['study_instance_uid'])) {
+            return redirect()->to('/studies')->with('error', 'Sin permiso para reenviar enlaces de otro centro.');
         }
 
         $email = trim((string) ($this->request->getPost('patient_email') ?? $link['patient_email'] ?? ''));
@@ -633,10 +648,19 @@ class PatientAccessController extends BaseController
             ->with('message', 'Has cerrado el acceso al estudio.');
     }
 
-    private function canManagePatientAccess(): bool
+    private function canManagePatientAccess(?string $studyUid = null): bool
     {
         $user = auth()->user();
-        return $user !== null && $user->can('studies.share');
+        if ($user === null || ! $user->can('studies.share')) {
+            return false;
+        }
+
+        if ($studyUid !== null && user_center_id($user) !== null) {
+            $study = model(StudyModel::class)->findByStudyUid($studyUid);
+            return user_can_access_study($user, $study);
+        }
+
+        return true;
     }
 
     /**

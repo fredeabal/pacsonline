@@ -29,9 +29,9 @@
           <i class="ti ti-edit"></i> <span class="d-none d-sm-inline">Editar datos DICOM</span>
         </a>
       <?php endif; ?>
-      <?php if (empty($report) && $currentUser?->can('reports.review')): ?>
+      <?php if ($currentUser?->can('reports.review') && (empty($report) || ($report['status'] ?? '') !== 'reported')): ?>
         <a href="<?= base_url('reports/edit/' . urlencode($studyUid)) ?>" class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1">
-          <i class="ti ti-stethoscope"></i> Informar
+          <i class="ti ti-stethoscope"></i> <?= empty($report) ? 'Informar' : 'Editar borrador' ?>
         </a>
       <?php endif; ?>
       <?php if ($currentUser?->can('studies.share')): ?>
@@ -113,7 +113,8 @@
       <input type="hidden" name="orthanc_id" value="<?= esc($study['orthanc_id'] ?? '') ?>">
 
       <div class="row g-3">
-        <div class="col-md-6">
+        <?php $hasCentersList = ! empty($centers); ?>
+        <div class="<?= $hasCentersList ? 'col-md-4' : 'col-md-6' ?>">
           <label for="assigned_doctor_id" class="form-label fw-semibold">Médico informante</label>
           <select class="form-select" id="assigned_doctor_id" name="assigned_doctor_id">
             <option value="">-- Cualquier médico --</option>
@@ -125,7 +126,21 @@
           </select>
         </div>
 
-        <div class="col-md-6">
+        <?php if ($hasCentersList): ?>
+        <div class="col-md-4">
+          <label for="case_center_id" class="form-label fw-semibold">Centro remitente</label>
+          <select class="form-select" id="case_center_id" name="center_id">
+            <option value="">-- Sin centro asignado --</option>
+            <?php foreach ($centers as $c): ?>
+              <option value="<?= (int) $c['id'] ?>" <?= ((int) ($study['center_id'] ?? 0) === (int) $c['id']) ? 'selected' : '' ?>>
+                <?= esc($c['name']) ?> (<?= esc($c['ae_title']) ?>)
+              </option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+        <?php endif; ?>
+
+        <div class="<?= $hasCentersList ? 'col-md-4' : 'col-md-6' ?>">
           <label for="priority" class="form-label fw-semibold">Prioridad</label>
           <select class="form-select" id="priority" name="priority">
             <option value="normal" <?= ($study['priority'] ?? 'normal') === 'normal' ? 'selected' : '' ?>>Normal</option>
@@ -175,12 +190,14 @@
 
 <?php
   $hasPublishedReport = ! empty($report) && ($report['status'] ?? '') === 'reported';
+  $hasDraftReport     = ! empty($report) && ($report['status'] ?? '') !== 'reported' && $currentUser?->can('reports.review');
+  $showReportRow      = $hasPublishedReport || $hasDraftReport;
   $dicomDocsList      = $dicomDocs ?? [];
 ?>
 <div class="card mb-4">
   <div class="card-header bg-primary-subtle d-flex justify-content-between align-items-center">
     <h5 class="mb-0 text-primary fw-semibold">Documentos clínicos (Informes / Analíticas)</h5>
-    <span class="badge bg-primary-subtle text-primary border border-primary-subtle fs-2"><?= count($attachments) + count($dicomDocsList) + ($hasPublishedReport ? 1 : 0) ?> archivos</span>
+    <span class="badge bg-primary-subtle text-primary border border-primary-subtle fs-2"><?= count($attachments) + count($dicomDocsList) + ($showReportRow ? 1 : 0) ?> archivos</span>
   </div>
 
   <div class="card-body">
@@ -196,7 +213,7 @@
           </tr>
         </thead>
         <tbody>
-          <?php if (! $hasPublishedReport && empty($attachments) && empty($dicomDocsList)): ?>
+          <?php if (! $showReportRow && empty($attachments) && empty($dicomDocsList)): ?>
             <tr>
               <td colspan="5" class="text-center py-4 text-muted">
                 <div class="py-3">
@@ -206,16 +223,20 @@
               </td>
             </tr>
           <?php else: ?>
-            <?php if ($hasPublishedReport): ?>
+            <?php if ($showReportRow): ?>
             <tr style="cursor: pointer;" onclick="window.open('<?= base_url('reports/pdf/' . urlencode($studyUid)) ?>', '_blank')">
               <td class="text-muted small"><?= esc(format_date($report['reported_at'] ?? ($report['updated_at'] ?? null))) ?></td>
               <td class="fw-semibold text-body">
-                <i class="ti ti-file-text text-primary me-1"></i> Informe_Medico_Oficial.pdf
+                <i class="ti ti-file-text text-primary me-1"></i> <?= $hasPublishedReport ? 'Informe_Medico_Oficial.pdf' : 'Informe_Medico_Borrador.pdf' ?>
               </td>
               <td class="text-center">
-                <span class="badge bg-primary-subtle text-primary border border-primary-subtle fs-2 fw-semibold">PDF</span>
+                <?php if ($hasPublishedReport): ?>
+                  <span class="badge bg-primary-subtle text-primary border border-primary-subtle fs-2 fw-semibold">PDF</span>
+                <?php else: ?>
+                  <span class="badge bg-warning-subtle text-warning border border-warning-subtle fs-2 fw-semibold">Borrador</span>
+                <?php endif; ?>
               </td>
-              <td class="text-center text-muted small">Oficial</td>
+              <td class="text-center text-muted small"><?= $hasPublishedReport ? 'Oficial' : 'En revisión' ?></td>
               <td class="text-end pe-3" onclick="event.stopPropagation();">
                 <div class="dropdown dropstart d-inline-block">
                   <button type="button" class="btn btn-link text-muted p-1 d-inline-block border-0 shadow-none text-decoration-none" data-bs-toggle="dropdown" data-bs-popper-config='{"strategy":"fixed"}' aria-expanded="false" title="Acciones" aria-label="Acciones">
@@ -224,13 +245,13 @@
                   <ul class="dropdown-menu dropdown-menu-end shadow-sm">
                     <li>
                       <a class="dropdown-item d-flex align-items-center gap-2" href="<?= base_url('reports/pdf/' . urlencode($studyUid)) ?>" target="_blank">
-                        <i class="ti ti-eye fs-5"></i> Ver / Descargar PDF
+                        <i class="ti ti-eye fs-5"></i> <?= $hasPublishedReport ? 'Ver / Descargar PDF' : 'Vista previa PDF' ?>
                       </a>
                     </li>
-                    <?php if (auth()->user()?->can('reports.review')): ?>
+                    <?php if ($currentUser?->can('reports.review')): ?>
                       <li>
                         <a class="dropdown-item d-flex align-items-center gap-2" href="<?= base_url('reports/edit/' . urlencode($studyUid)) ?>">
-                          <i class="ti ti-edit fs-5"></i> Editar informe
+                          <i class="ti ti-edit fs-5"></i> <?= $hasPublishedReport ? 'Editar informe' : 'Editar borrador' ?>
                         </a>
                       </li>
                     <?php endif; ?>
@@ -333,6 +354,12 @@
     </div>
   </div>
 </div>
+
+<?= view('studies/_priors_card', [
+    'studyUid'       => $studyUid,
+    'priorStudies'   => $priorStudies ?? [],
+    'isReportEditor' => false,
+]) ?>
 
 <?php if ($currentUser?->can('studies.attachments')): ?>
 <div class="card mb-4">

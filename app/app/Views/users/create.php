@@ -11,7 +11,8 @@
   <div class="card-body">
     <?php
       $selectedRole = old('role', 'observador');
-      $showsMedical = in_array($selectedRole, ['medico', 'admin'], true);
+      $showsMedical = $selectedRole === 'medico';
+      $isSupervisor = $selectedRole === 'admin';
     ?>
     <form action="<?= base_url('users') ?>" method="post">
       <?= csrf_field() ?>
@@ -32,7 +33,7 @@
           <input type="email" class="form-control" id="email" name="email" value="<?= esc(old('email')) ?>" required>
         </div>
 
-        <div class="<?= $showsMedical ? 'col-md-4' : 'col-12' ?>" id="roleCol">
+        <div class="<?= $isSupervisor ? 'col-12' : 'col-md-6' ?>" id="roleCol">
           <label for="role" class="form-label fw-semibold">Rol en el PACS</label>
           <select class="form-select" id="role" name="role" required>
             <option value="observador" <?= $selectedRole === 'observador' ? 'selected' : '' ?>>Observador</option>
@@ -42,12 +43,24 @@
           </select>
         </div>
 
-        <div class="col-md-4 doctor-only-field <?= ! $showsMedical ? 'd-none' : '' ?>">
+        <div class="col-md-6 <?= $isSupervisor ? 'd-none' : '' ?>" id="centerCol">
+          <label for="center_id" class="form-label fw-semibold">Ámbito de centros</label>
+          <select class="form-select" id="center_id" name="center_id">
+            <option value="">-- Todos los centros --</option>
+            <?php foreach ($centers ?? [] as $c): ?>
+              <option value="<?= (int) $c['id'] ?>" <?= (string) old('center_id') === (string) $c['id'] ? 'selected' : '' ?>>
+                <?= esc($c['name']) ?> (<?= esc($c['ae_title']) ?>)
+              </option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+
+        <div class="col-md-6 doctor-only-field <?= ! $showsMedical ? 'd-none' : '' ?>">
           <label for="specialty" class="form-label fw-semibold">Especialidad</label>
           <input type="text" class="form-control" id="specialty" name="specialty" value="<?= esc(old('specialty')) ?>">
         </div>
 
-        <div class="col-md-4 doctor-only-field <?= ! $showsMedical ? 'd-none' : '' ?>">
+        <div class="col-md-6 doctor-only-field <?= ! $showsMedical ? 'd-none' : '' ?>">
           <label for="license_number" class="form-label fw-semibold">Nº de Colegiado</label>
           <input type="text" class="form-control" id="license_number" name="license_number" value="<?= esc(old('license_number')) ?>">
         </div>
@@ -85,22 +98,29 @@
   document.addEventListener('DOMContentLoaded', function() {
     const roleSelect = document.getElementById('role');
     const roleCol = document.getElementById('roleCol');
+    const centerCol = document.getElementById('centerCol');
+    const centerSelect = document.getElementById('center_id');
     const doctorFields = document.querySelectorAll('.doctor-only-field');
-    if (!roleSelect || !doctorFields.length) return;
+    if (!roleSelect) return;
 
-    function toggleDoctorFields() {
-      const showsMedical = roleSelect.value === 'medico' || roleSelect.value === 'admin';
+    function toggleRoleFields() {
+      const isMedico = roleSelect.value === 'medico';
+      const isAdmin  = roleSelect.value === 'admin';
       if (roleCol) {
-        roleCol.classList.toggle('col-md-4', showsMedical);
-        roleCol.classList.toggle('col-12', !showsMedical);
+        roleCol.classList.toggle('col-12', isAdmin);
+        roleCol.classList.toggle('col-md-6', !isAdmin);
+      }
+      if (centerCol) {
+        centerCol.classList.toggle('d-none', isAdmin);
+        if (isAdmin && centerSelect) centerSelect.value = '';
       }
       doctorFields.forEach(function(el) {
-        el.classList.toggle('d-none', !showsMedical);
+        el.classList.toggle('d-none', !isMedico);
       });
     }
 
-    roleSelect.addEventListener('change', toggleDoctorFields);
-    toggleDoctorFields();
+    roleSelect.addEventListener('change', toggleRoleFields);
+    toggleRoleFields();
   });
 </script>
 <?= $this->endSection() ?>

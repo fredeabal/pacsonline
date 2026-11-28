@@ -244,6 +244,199 @@ class OrthancClient
         }
     }
 
+    /**
+     * Busca otros estudios del mismo paciente en Orthanc por PatientID exacto (/tools/find),
+     * excluyendo opcionalmente el estudio actual y ordenando del más reciente al más antiguo.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function findStudiesByPatientId(string $patientId, string $excludeStudyUid = '', int $limit = 20): array
+    {
+        $clean = trim($patientId);
+        if ($clean === '' || in_array(strtoupper($clean), ['-', '0', 'UNKNOWN', 'ANONYMOUS', 'ANON', 'N/A', 'NA', 'NONE'], true)) {
+            return [];
+        }
+
+        try {
+            $res = $this->http->request(
+                'POST',
+                $this->baseUrl . '/tools/find',
+                $this->requestOptions([
+                    'json' => [
+                        'Level'         => 'Study',
+                        'Expand'        => true,
+                        'Query'         => ['PatientID' => $clean],
+                        'CaseSensitive' => false,
+                        'RequestedTags' => ['ModalitiesInStudy'],
+                        'Limit'         => max(1, $limit + 1),
+                        'OrderBy'       => [
+                            [
+                                'Type'      => 'DicomTag',
+                                'Key'       => 'StudyDate',
+                                'Direction' => 'DESC',
+                            ],
+                        ],
+                    ],
+                ])
+            );
+
+            if ($res->getStatusCode() !== 200) {
+                return [];
+            }
+
+            $data = json_decode((string) $res->getBody(), true);
+            if (! is_array($data)) {
+                return [];
+            }
+
+            $results = [];
+            foreach ($data as $study) {
+                if (! is_array($study)) {
+                    continue;
+                }
+
+                $foundPatientId = trim((string) ($study['PatientMainDicomTags']['PatientID'] ?? ''));
+                if ($foundPatientId === '' || strcasecmp($foundPatientId, $clean) !== 0) {
+                    continue;
+                }
+
+                $uid = trim((string) ($study['MainDicomTags']['StudyInstanceUID'] ?? ''));
+                if ($uid === '' || ($excludeStudyUid !== '' && $uid === $excludeStudyUid)) {
+                    continue;
+                }
+
+                $results[] = $study;
+            }
+
+            usort($results, static function (array $a, array $b): int {
+                $dateA = (string) ($a['MainDicomTags']['StudyDate'] ?? '');
+                $dateB = (string) ($b['MainDicomTags']['StudyDate'] ?? '');
+                $cmp   = strcmp($dateB, $dateA);
+                if ($cmp !== 0) {
+                    return $cmp;
+                }
+
+                $timeA = (string) ($a['MainDicomTags']['StudyTime'] ?? '');
+                $timeB = (string) ($b['MainDicomTags']['StudyTime'] ?? '');
+
+                return strcmp($timeB, $timeA);
+            });
+
+            return array_slice($results, 0, max(1, $limit));
+        } catch (\Throwable) {
+            return [];
+        }
+    }
+
+    /**
+     * Completa RequestedTags.ModalitiesInStudy para un lote pequeño de estudios (página actual)
+     * usando caché (24h) y peticiones paralelas curl_multi solo para los no cacheados.
+     * Evita pedir ModalitiesInStudy en /tools/find sobre todo el índice.
+     *
+     * @param list<array<string, mixed>> $studies
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function enrichStudiesModalities(array $studies): array
+    {
+        if ($studies === []) {
+            return [];
+        }
+
+        $cache   = Services::cache();
+        $missing = [];
+
+        foreach ($studies as $idx => $study) {
+            $existing = $study['RequestedTags']['ModalitiesInStudy'] ?? '';
+            if (is_string($existing) && trim($existing) !== '') {
+                continue;
+            }
+
+            $orthancId = trim((string) ($study['ID'] ?? ''));
+            if ($orthancId === '') {
+                continue;
+            }
+
+            $cacheKey = 'orthanc_mod_' . preg_replace('/[^a-zA-Z0-9_-]/', '_', $orthancId);
+            $cached   = $cache->get($cacheKey);
+            if (is_string($cached) && $cached !== '') {
+                $studies[$idx]['RequestedTags']['ModalitiesInStudy'] = $cached;
+                continue;
+            }
+
+            $missing[$idx] = [
+                'id'        => $orthancId,
+                'cache_key' => $cacheKey,
+            ];
+        }
+
+        if ($missing === []) {
+            return $studies;
+        }
+
+        $mh      = curl_multi_init();
+        $handles = [];
+
+        foreach ($missing as $idx => $info) {
+            $url = $this->baseUrl . '/studies/' . rawurlencode($info['id']) . '?requestedTags=ModalitiesInStudy';
+            $ch  = curl_init($url);
+            if ($ch === false) {
+                continue;
+            }
+
+            $opts = [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_CONNECTTIMEOUT => 2,
+                CURLOPT_TIMEOUT        => 5,
+            ];
+            if ($this->username !== null && $this->password !== null) {
+                $opts[CURLOPT_HTTPAUTH] = CURLAUTH_BASIC;
+                $opts[CURLOPT_USERPWD]  = $this->username . ':' . $this->password;
+            }
+
+            curl_setopt_array($ch, $opts);
+            curl_multi_add_handle($mh, $ch);
+            $handles[$idx] = $ch;
+        }
+
+        $active = null;
+        do {
+            $status = curl_multi_exec($mh, $active);
+            if ($active && $status === CURLM_OK) {
+                curl_multi_select($mh, 0.1);
+            }
+        } while ($active && $status === CURLM_OK);
+
+        foreach ($handles as $idx => $ch) {
+            $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $body     = (string) curl_multi_getcontent($ch);
+            curl_multi_remove_handle($mh, $ch);
+            curl_close($ch);
+
+            if ($httpCode !== 200 || $body === '') {
+                continue;
+            }
+
+            $decoded = json_decode($body, true);
+            $mod     = is_array($decoded) ? ($decoded['RequestedTags']['ModalitiesInStudy'] ?? null) : null;
+            if (is_array($mod)) {
+                $mod = implode('\\', array_filter(array_map('strval', $mod)));
+            }
+            if (is_string($mod) && trim($mod) !== '') {
+                $cleanMod = trim($mod);
+                $studies[$idx]['RequestedTags']['ModalitiesInStudy'] = $cleanMod;
+                $resolved = extract_study_modality($studies[$idx]);
+                if (! in_array($resolved, ['SR', 'DOC', 'PR', 'KO', 'AU', 'DICOM'], true)) {
+                    $cache->save($missing[$idx]['cache_key'], $cleanMod, 86400);
+                }
+            }
+        }
+
+        curl_multi_close($mh);
+
+        return $studies;
+    }
+
     public function getStudy(string $orthancStudyId): ?array
     {
         try {

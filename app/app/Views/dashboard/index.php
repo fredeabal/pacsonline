@@ -7,13 +7,13 @@
       <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
         <div>
           <?php if ($roleMode === 'medico'): ?>
-            <h4 class="fw-bold mb-1">Panel Médico</h4>
+            <h4 class="fw-bold mb-1">Panel Médico<?= ! empty($scopedCenterName) ? ' · ' . esc($scopedCenterName) : '' ?></h4>
             <p class="text-muted mb-0">Revisa los estudios pendientes en tu Worklist y emite informes médicos.</p>
           <?php elseif ($roleMode === 'usuario'): ?>
-            <h4 class="fw-bold mb-1">Panel de Gestión PACS</h4>
+            <h4 class="fw-bold mb-1">Panel de Gestión PACS<?= ! empty($scopedCenterName) ? ' · ' . esc($scopedCenterName) : '' ?></h4>
             <p class="text-muted mb-0">Consulta estudios, sube archivos DICOM, reenvía a nodos y genera enlaces de envío para pacientes.</p>
           <?php elseif ($roleMode === 'observador'): ?>
-            <h4 class="fw-bold mb-1">Panel de Consulta PACS</h4>
+            <h4 class="fw-bold mb-1">Panel de Consulta PACS<?= ! empty($scopedCenterName) ? ' · ' . esc($scopedCenterName) : '' ?></h4>
             <p class="text-muted mb-0">Visualiza los casos clínicos, el visor DICOM y los informes médicos publicados.</p>
           <?php else: ?>
             <h4 class="fw-bold mb-1">Panel de Supervisión PACS</h4>

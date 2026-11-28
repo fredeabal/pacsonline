@@ -12,7 +12,7 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="robots" content="noindex, nofollow" />
-  <title>PACS Online | Enlace no disponible</title>
+  <title>PACSLine | Enlace no disponible</title>
   <meta name="theme-color" content="#5d87ff" />
 
   <link rel="icon" type="image/svg+xml" href="<?= base_url('assets/images/logos/favicon.svg') ?>" />
@@ -45,8 +45,8 @@
           <div class="col-12 col-xl-5 col-xxl-4 bg-body d-flex justify-content-center align-items-center p-4 min-vh-100">
             <div class="auth-max-width w-100 col-sm-8 col-md-6 col-xl-9 px-4 text-center">
               <div class="text-nowrap logo-img d-flex align-items-center justify-content-center mb-5">
-                <img src="<?= base_url('assets/images/logos/pacs_line_logo_light.svg') ?>?v=<?= filemtime(FCPATH . 'assets/images/logos/pacs_line_logo_light.svg') ?>" class="light-logo login-logo" alt="PACS Online" />
-                <img src="<?= base_url('assets/images/logos/pacs_line_logo_dark.svg') ?>?v=<?= filemtime(FCPATH . 'assets/images/logos/pacs_line_logo_dark.svg') ?>" class="dark-logo login-logo" alt="PACS Online" />
+                <img src="<?= base_url('assets/images/logos/pacs_line_logo_light.svg') ?>?v=<?= filemtime(FCPATH . 'assets/images/logos/pacs_line_logo_light.svg') ?>" class="light-logo login-logo" alt="PACSLine" />
+                <img src="<?= base_url('assets/images/logos/pacs_line_logo_dark.svg') ?>?v=<?= filemtime(FCPATH . 'assets/images/logos/pacs_line_logo_dark.svg') ?>" class="dark-logo login-logo" alt="PACSLine" />
               </div>
 
               <span class="d-inline-flex align-items-center justify-content-center rounded-circle bg-danger-subtle text-danger mb-3" style="width: 64px; height: 64px;">

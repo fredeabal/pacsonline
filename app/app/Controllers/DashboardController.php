@@ -20,7 +20,7 @@ class DashboardController extends BaseController
     public function index(): string
     {
         return view('dashboard/index', array_merge(
-            ['title' => 'Dashboard | PACS Online'],
+            ['title' => 'Dashboard | PACSLine'],
             $this->collectDashboardData()
         ));
     }
@@ -41,9 +41,12 @@ class DashboardController extends BaseController
                 'diskStats'     => $data['diskStats'],
                 'alerts'        => $data['alerts'],
                 'totalStudies'  => $data['totalStudies'],
-                'pendingCount'  => $data['pendingCount'],
-                'urgentCount'   => $data['urgentCount'],
-                'reportedCount' => $data['reportedCount'],
+                'pendingCount'       => $data['pendingCount'],
+                'urgentCount'        => $data['urgentCount'],
+                'reportedCount'      => $data['reportedCount'],
+                'assignedToMeCount'  => $data['assignedToMeCount'],
+                'draftCount'         => $data['draftCount'],
+                'reportedTodayCount' => $data['reportedTodayCount'],
             ]);
     }
 
@@ -116,6 +119,38 @@ class DashboardController extends BaseController
                 ->countAllResults();
         }
 
+        $assignedToMeCount  = 0;
+        $draftCount         = 0;
+        $reportedTodayCount = 0;
+        if ($isMedico && $user !== null) {
+            $assignedBuilder = $studyModel->builder()
+                ->join('medical_reports', "medical_reports.study_instance_uid = studies.study_instance_uid AND medical_reports.status = 'reported'", 'left')
+                ->where('studies.assigned_doctor_id', (int) $user->id)
+                ->where('medical_reports.id IS NULL', null, false);
+            if ($scopedCenterId !== null) {
+                $assignedBuilder->where('studies.center_id', $scopedCenterId);
+            }
+            $assignedToMeCount = (int) $assignedBuilder->countAllResults();
+
+            $draftBuilder = $reportModel->builder()
+                ->whereIn('medical_reports.status', ['in_review', 'draft']);
+            if ($scopedCenterId !== null) {
+                $draftBuilder->join('studies', 'studies.study_instance_uid = medical_reports.study_instance_uid', 'inner')
+                    ->where('studies.center_id', $scopedCenterId);
+            }
+            $draftCount = (int) $draftBuilder->countAllResults();
+
+            $todayStart   = date('Y-m-d 00:00:00');
+            $todayBuilder = $reportModel->builder()
+                ->where('medical_reports.status', 'reported')
+                ->where('medical_reports.reported_at >=', $todayStart);
+            if ($scopedCenterId !== null) {
+                $todayBuilder->join('studies', 'studies.study_instance_uid = medical_reports.study_instance_uid', 'inner')
+                    ->where('studies.center_id', $scopedCenterId);
+            }
+            $reportedTodayCount = (int) $todayBuilder->countAllResults();
+        }
+
         $alerts = [];
         if (! $alive) {
             $alerts[] = [
@@ -159,9 +194,12 @@ class DashboardController extends BaseController
             'diskStats'     => $diskStats,
             'alerts'        => $alerts,
             'totalStudies'  => $totalStudies,
-            'pendingCount'  => $pendingCount,
-            'urgentCount'   => $urgentCount,
-            'reportedCount' => $reportedCount,
+            'pendingCount'       => $pendingCount,
+            'urgentCount'        => $urgentCount,
+            'reportedCount'      => $reportedCount,
+            'assignedToMeCount'  => $assignedToMeCount,
+            'draftCount'         => $draftCount,
+            'reportedTodayCount' => $reportedTodayCount,
         ];
     }
 }

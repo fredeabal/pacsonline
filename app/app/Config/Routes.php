@@ -47,6 +47,7 @@ $routes->group('', ['filter' => 'session'], static function ($routes) {
     $routes->post('studies/assign', [StudyController::class, 'assignPatient']);
     $routes->get('studies/case/(:segment)', [StudyController::class, 'caseView']);
     $routes->post('studies/case/(:segment)', [StudyController::class, 'updateCase']);
+    $routes->post('studies/case/(:segment)/notify-doctor', [StudyController::class, 'notifyAssignedDoctor']);
     $routes->get('studies/case/(:segment)/dicom', [StudyController::class, 'editDicom']);
     $routes->post('studies/case/(:segment)/patient-dicom', [StudyController::class, 'updateDicomPatient']);
     $routes->post('studies/case/(:segment)/notes', [StudyController::class, 'updateNotes']);

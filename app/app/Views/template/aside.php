@@ -2,8 +2,8 @@
       <div>
         <div class="brand-logo d-flex align-items-center justify-content-between">
           <a href="<?= base_url() ?>" class="text-nowrap logo-img text-decoration-none">
-            <img src="<?= base_url('assets/images/logos/pacs_line_logo_light.svg') ?>?v=<?= filemtime(FCPATH . 'assets/images/logos/pacs_line_logo_light.svg') ?>" class="light-logo" alt="PACS Online" />
-            <img src="<?= base_url('assets/images/logos/pacs_line_logo_dark.svg') ?>?v=<?= filemtime(FCPATH . 'assets/images/logos/pacs_line_logo_dark.svg') ?>" class="dark-logo" alt="PACS Online" />
+            <img src="<?= base_url('assets/images/logos/pacs_line_logo_light.svg') ?>?v=<?= filemtime(FCPATH . 'assets/images/logos/pacs_line_logo_light.svg') ?>" class="light-logo" alt="PACSLine" />
+            <img src="<?= base_url('assets/images/logos/pacs_line_logo_dark.svg') ?>?v=<?= filemtime(FCPATH . 'assets/images/logos/pacs_line_logo_dark.svg') ?>" class="dark-logo" alt="PACSLine" />
           </a>
           <button type="button" class="sidebartoggler ms-auto btn border-0 bg-transparent text-body fs-5 d-block d-xl-none p-1 shadow-none" aria-label="Cerrar menú lateral">
             <i class="ti ti-x"></i>
@@ -41,10 +41,29 @@
             <?php endif; ?>
 
             <?php if ($canReview || $isSupervisor): ?>
+              <?php
+                $hasDraftReports = false;
+                try {
+                    $draftQuery     = model(\App\Models\MedicalReportModel::class)
+                        ->select('medical_reports.id')
+                        ->whereIn('medical_reports.status', ['in_review', 'draft']);
+                    $scopedCenterId = user_center_id($user);
+                    if ($scopedCenterId !== null) {
+                        $draftQuery->join('studies', 'studies.study_instance_uid = medical_reports.study_instance_uid')
+                            ->where('studies.center_id', $scopedCenterId);
+                    }
+                    $hasDraftReports = $draftQuery->first() !== null;
+                } catch (\Throwable $e) {
+                    $hasDraftReports = false;
+                }
+              ?>
               <li class="sidebar-item">
-                <a class="sidebar-link" href="<?= base_url('reports?status=in_review') ?>" aria-expanded="false">
+                <a class="sidebar-link d-flex align-items-center" href="<?= base_url('reports?status=in_review') ?>" aria-expanded="false">
                   <span><i class="ti ti-file-pencil"></i></span>
                   <span class="hide-menu">Borradores</span>
+                  <?php if ($hasDraftReports): ?>
+                    <span class="rounded-circle bg-warning ms-auto flex-shrink-0 hide-menu" style="width: 8px; height: 8px;" title="Hay borradores pendientes" aria-label="Hay borradores pendientes"></span>
+                  <?php endif; ?>
                 </a>
               </li>
             <?php endif; ?>

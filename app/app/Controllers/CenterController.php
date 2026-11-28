@@ -27,7 +27,7 @@ class CenterController extends BaseController
         $centers = model(MedicalCenterModel::class)->orderBy('id', 'DESC')->findAll();
 
         return view('centers/index', [
-            'title'   => 'Centros Médicos | PACS Online',
+            'title'   => 'Centros Médicos | PACSLine',
             'centers' => $centers,
         ]);
     }
@@ -42,7 +42,7 @@ class CenterController extends BaseController
         }
 
         return view('centers/create', [
-            'title' => 'Nuevo Centro Médico | PACS Online',
+            'title' => 'Nuevo Centro Médico | PACSLine',
         ]);
     }
 
@@ -116,7 +116,7 @@ class CenterController extends BaseController
         }
 
         return view('centers/edit', [
-            'title'  => 'Editar Centro Médico | PACS Online',
+            'title'  => 'Editar Centro Médico | PACSLine',
             'center' => $center,
         ]);
     }

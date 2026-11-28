@@ -244,7 +244,7 @@ class ReportController extends BaseController
         sort($modalities);
 
         return view('reports/index', [
-            'title'               => 'Informar Estudios | PACS Online',
+            'title'               => 'Informar Estudios | PACSLine',
             'rows'                => $rows,
             'filter'              => $filter,
             'scope'               => $scope,
@@ -351,7 +351,7 @@ class ReportController extends BaseController
             : null;
 
         return view('reports/edit', [
-            'title'          => 'Redactar Informe Médico | PACS Online',
+            'title'          => 'Redactar Informe Médico | PACSLine',
             'studyUid'       => $studyUid,
             'study'          => $study,
             'report'         => $report,

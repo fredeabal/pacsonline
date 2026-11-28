@@ -31,7 +31,7 @@ class AuditController extends BaseController
         $auditData = model(AuditLogModel::class)->paginatedWithUsers($filters, 50, $page);
 
         return view('audit/index', [
-            'title'     => 'Auditoría | PACS Online',
+            'title'     => 'Auditoría | PACSLine',
             'logs'      => $auditData['logs'],
             'auditData' => $auditData,
             'filters'   => $filters,

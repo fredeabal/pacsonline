@@ -28,7 +28,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="robots" content="noindex, nofollow" />
   <meta name="referrer" content="no-referrer" />
-  <title>Mi Estudio Médico | PACS Online</title>
+  <title>Mi Estudio Médico | PACSLine</title>
   <meta name="theme-color" content="#5d87ff" />
 
   <link rel="icon" type="image/svg+xml" href="<?= base_url('assets/images/logos/favicon.svg') ?>" />
@@ -45,8 +45,8 @@
     <div class="container-xl py-2">
       <nav class="navbar navbar-expand p-0">
         <div class="d-flex align-items-center gap-3 text-nowrap">
-          <img src="<?= base_url('assets/images/logos/pacs_line_logo_light.svg') ?>?v=<?= filemtime(FCPATH . 'assets/images/logos/pacs_line_logo_light.svg') ?>" class="light-logo" alt="PACS Online" style="height: 36px; width: auto;" />
-          <img src="<?= base_url('assets/images/logos/pacs_line_logo_dark.svg') ?>?v=<?= filemtime(FCPATH . 'assets/images/logos/pacs_line_logo_dark.svg') ?>" class="dark-logo" alt="PACS Online" style="height: 36px; width: auto;" />
+          <img src="<?= base_url('assets/images/logos/pacs_line_logo_light.svg') ?>?v=<?= filemtime(FCPATH . 'assets/images/logos/pacs_line_logo_light.svg') ?>" class="light-logo" alt="PACSLine" style="height: 36px; width: auto;" />
+          <img src="<?= base_url('assets/images/logos/pacs_line_logo_dark.svg') ?>?v=<?= filemtime(FCPATH . 'assets/images/logos/pacs_line_logo_dark.svg') ?>" class="dark-logo" alt="PACSLine" style="height: 36px; width: auto;" />
           <small class="text-muted fs-2 border-start ps-3 d-none d-sm-inline">Portal de Resultados del Paciente</small>
         </div>
 

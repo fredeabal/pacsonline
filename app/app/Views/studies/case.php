@@ -149,13 +149,23 @@
         </div>
       </div>
 
-      <div class="d-flex justify-content-center gap-2 mt-4">
+      <div class="d-flex flex-wrap justify-content-center gap-2 mt-4">
         <a href="<?= base_url('studies') ?>" class="btn btn-sm btn-dark">Cancelar</a>
         <button type="submit" class="btn btn-sm btn-primary">
           <i class="ti ti-device-floppy me-1"></i> Guardar Asignación
         </button>
+        <?php if (! empty($study['assigned_doctor_id'])): ?>
+          <button type="submit" form="notifyDoctorForm" class="btn btn-sm btn-outline-primary">
+            <i class="ti ti-mail-forward me-1"></i> Avisar al Médico
+          </button>
+        <?php endif; ?>
       </div>
     </form>
+    <?php if (! empty($study['assigned_doctor_id'])): ?>
+      <form id="notifyDoctorForm" action="<?= base_url('studies/case/' . urlencode($studyUid) . '/notify-doctor') ?>" method="post" class="d-none">
+        <?= csrf_field() ?>
+      </form>
+    <?php endif; ?>
   </div>
 </div>
 <?php endif; ?>

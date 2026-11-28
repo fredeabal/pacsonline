@@ -20,7 +20,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="description" content="PACS Online — Gestión de estudios DICOM, compartición segura y segunda opinión médica." />
+  <meta name="description" content="PACSLine — Gestión de estudios DICOM, compartición segura y segunda opinión médica." />
 
   <link rel="icon" type="image/svg+xml" href="<?= base_url('assets/images/logos/favicon.svg') ?>" />
   <link rel="alternate icon" type="image/png" href="<?= base_url('assets/images/logos/favicon.png') ?>" />
@@ -31,7 +31,7 @@
   <link rel="stylesheet" href="<?= base_url('assets/libs/select2/dist/css/select2.min.css') ?>" />
   <link rel="stylesheet" href="<?= base_url('assets/libs/bootstrap-datepicker/dist/css/bootstrap-datepicker.min.css') ?>" />
 
-  <title><?= esc($title ?? 'PACS Online') ?></title>
+  <title><?= esc($title ?? 'PACSLine') ?></title>
 </head>
 
 <body>
@@ -50,8 +50,8 @@
 
           <div class="d-block d-lg-none py-3">
             <a href="<?= base_url() ?>" class="text-nowrap logo-img text-decoration-none d-flex align-items-center">
-              <img src="<?= base_url('assets/images/logos/pacs_line_logo_light.svg') ?>?v=<?= filemtime(FCPATH . 'assets/images/logos/pacs_line_logo_light.svg') ?>" class="light-logo" alt="PACS Online" style="height: 32px; width: auto;" />
-              <img src="<?= base_url('assets/images/logos/pacs_line_logo_dark.svg') ?>?v=<?= filemtime(FCPATH . 'assets/images/logos/pacs_line_logo_dark.svg') ?>" class="dark-logo" alt="PACS Online" style="height: 32px; width: auto;" />
+              <img src="<?= base_url('assets/images/logos/pacs_line_logo_light.svg') ?>?v=<?= filemtime(FCPATH . 'assets/images/logos/pacs_line_logo_light.svg') ?>" class="light-logo" alt="PACSLine" style="height: 32px; width: auto;" />
+              <img src="<?= base_url('assets/images/logos/pacs_line_logo_dark.svg') ?>?v=<?= filemtime(FCPATH . 'assets/images/logos/pacs_line_logo_dark.svg') ?>" class="dark-logo" alt="PACSLine" style="height: 32px; width: auto;" />
             </a>
           </div>
 

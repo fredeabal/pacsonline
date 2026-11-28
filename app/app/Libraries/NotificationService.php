@@ -28,7 +28,7 @@ class NotificationService
 
         $email = $this->configuredEmail();
         $email->setTo($patient->email);
-        $email->setSubject('Tu informe médico está disponible — PACS Online');
+        $email->setSubject('Tu informe médico está disponible — PACSLine');
 
         $portalUrl = base_url('studies');
         $body      = view('emails/report_published', [
@@ -65,7 +65,7 @@ class NotificationService
 
         $email = $this->configuredEmail();
         $email->setTo($patient->email);
-        $email->setSubject('Tus credenciales de acceso — PACS Online');
+        $email->setSubject('Tus credenciales de acceso — PACSLine');
         $email->setMessage(view('emails/patient_welcome', [
             'patientName'  => $patient->full_name ?: $patient->username,
             'email'        => $patient->email,
@@ -85,7 +85,8 @@ class NotificationService
     public function sendStudyAssignedEmail(string $studyUid, array $study, int $doctorId): bool
     {
         $settings = service('settings');
-        if (! (bool) $settings->get('Smtp.enabled')) {
+        $host     = trim((string) ($settings->get('Smtp.host') ?? ''));
+        if ($host === '') {
             return false;
         }
 
@@ -95,15 +96,27 @@ class NotificationService
         }
 
         $isUrgent = ($study['priority'] ?? 'normal') === 'urgent';
-        $subject  = ($isUrgent ? '[URGENTE] ' : '') . 'Nuevo estudio asignado — PACS Online';
+        $subject  = ($isUrgent ? '[URGENTE] ' : '') . 'Nuevo estudio asignado — PACSLine';
 
         $email = $this->configuredEmail();
         $email->setTo($doctor->email);
         $email->setSubject($subject);
+
+        $logoCid  = '';
+        $logoPath = FCPATH . 'assets/images/logos/pacs_line_logo_pdf.png';
+        if (is_file($logoPath)) {
+            $email->attach($logoPath, 'inline');
+            $cid = $email->setAttachmentCID($logoPath);
+            if (is_string($cid) && $cid !== '') {
+                $logoCid = $cid;
+            }
+        }
+
         $email->setMessage(view('emails/study_assigned', [
+            'logoCid'          => $logoCid,
             'doctorName'       => $doctor->full_name ?: $doctor->username,
-            'patientName'      => $study['patient_name'] ?? 'Paciente',
-            'studyDescription' => $study['study_description'] ?? 'Estudio DICOM',
+            'patientName'      => format_patient_name($study['patient_name'] ?? null, 'Paciente'),
+            'studyDescription' => format_study_description($study['study_description'] ?? null, 'Estudio DICOM'),
             'isUrgent'         => $isUrgent,
             'clinicalNotes'    => $study['clinical_notes'] ?? '',
             'reportUrl'        => base_url('reports/edit/' . urlencode($studyUid)),
@@ -134,7 +147,7 @@ class NotificationService
 
         $email = $this->configuredEmail();
         $email->setTo($toEmail);
-        $email->setSubject('Acceso seguro a tu estudio médico — PACS Online');
+        $email->setSubject('Acceso seguro a tu estudio médico — PACSLine');
         $email->setMessage(view('emails/patient_magic_link', [
             'patientName'      => $patientName,
             'studyDescription' => $studyDescription,
@@ -155,8 +168,8 @@ class NotificationService
     {
         $email = $this->configuredEmail();
         $email->setTo($toEmail);
-        $email->setSubject('Prueba SMTP — PACS Online');
-        $email->setMessage('<p>La configuración SMTP de <strong>PACS Online</strong> funciona correctamente.</p>');
+        $email->setSubject('Prueba SMTP — PACSLine');
+        $email->setMessage('<p>La configuración SMTP de <strong>PACSLine</strong> funciona correctamente.</p>');
 
         if ($email->send()) {
             return ['ok' => true];
@@ -184,7 +197,7 @@ class NotificationService
         $email->initialize($config);
 
         $fromEmail = (string) ($settings->get('Smtp.fromEmail') ?? 'no-reply@pacs.local');
-        $fromName  = (string) ($settings->get('Smtp.fromName') ?? 'PACS Online');
+        $fromName  = (string) ($settings->get('Smtp.fromName') ?? 'PACSLine');
         $email->setFrom($fromEmail, $fromName);
 
         return $email;

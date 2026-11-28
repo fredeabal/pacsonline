@@ -50,7 +50,7 @@ class SettingController extends BaseController
         $auditData = model(AuditLogModel::class)->paginatedWithUsers($auditFilters, 50, $auditPage);
 
         return view('settings/index', [
-            'title'             => 'Configuración | PACS Online',
+            'title'             => 'Configuración | PACSLine',
             'currentTab'        => $currentTab,
             'orthancAlive'      => $orthanc->isAlive(),
             'pacsAet'           => $pacsAet,
@@ -69,7 +69,7 @@ class SettingController extends BaseController
                 'hasPass'   => ! empty($settings->get('Smtp.pass')),
                 'crypto'    => (string) ($settings->get('Smtp.crypto') ?? 'tls'),
                 'fromEmail' => (string) ($settings->get('Smtp.fromEmail') ?? ''),
-                'fromName'  => (string) ($settings->get('Smtp.fromName') ?? 'PACS Online'),
+                'fromName'  => (string) ($settings->get('Smtp.fromName') ?? 'PACSLine'),
             ],
         ]);
     }

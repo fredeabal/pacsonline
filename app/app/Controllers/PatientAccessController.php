@@ -42,7 +42,7 @@ class PatientAccessController extends BaseController
         unset($link);
 
         return view('patient_access/manage', [
-            'title'    => 'Acceso Paciente | PACS Online',
+            'title'    => 'Acceso Paciente | PACSLine',
             'studyUid' => $studyUid,
             'study'    => $study,
             'links'    => $links,
@@ -66,7 +66,7 @@ class PatientAccessController extends BaseController
         $dicomBirthDate = PatientAccessLinkModel::normalizeBirthDate((string) ($pTags['PatientBirthDate'] ?? '')) ?? '';
 
         return view('patient_access/create', [
-            'title'          => 'Nuevo Acceso Paciente | PACS Online',
+            'title'          => 'Nuevo Acceso Paciente | PACSLine',
             'studyUid'       => $studyUid,
             'study'          => $study,
             'dicomPatientId' => $dicomPatientId,
@@ -203,7 +203,7 @@ class PatientAccessController extends BaseController
         $study    = $this->resolveStudyInfo($studyUid);
 
         return view('patient_access/edit', [
-            'title'    => 'Editar Acceso Paciente | PACS Online',
+            'title'    => 'Editar Acceso Paciente | PACSLine',
             'studyUid' => $studyUid,
             'study'    => $study,
             'link'     => $link,

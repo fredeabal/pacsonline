@@ -151,7 +151,7 @@ class StudyController extends BaseController
         }
 
         return view('studies/index', [
-            'title'        => 'Estudios DICOM | PACS Online',
+            'title'        => 'Estudios DICOM | PACSLine',
             'studies'      => $studies,
             'page'         => $page,
             'perPage'      => $perPage,
@@ -181,7 +181,7 @@ class StudyController extends BaseController
             : $centerModel->where('active', 1)->orderBy('name', 'ASC')->findAll();
 
         return view('studies/upload', [
-            'title'          => 'Subir Estudio | PACS Online',
+            'title'          => 'Subir Estudio | PACSLine',
             'doctors'        => $doctors,
             'centers'        => $centers,
             'lockedCenterId' => $scopedCenterId,
@@ -486,7 +486,7 @@ class StudyController extends BaseController
         $study['center_name'] = $centerName !== '' ? $centerName : '-';
 
         return view('studies/case', [
-            'title'              => 'Ficha del Caso | PACS Online',
+            'title'              => 'Ficha del Caso | PACSLine',
             'studyUid'           => $studyUid,
             'study'              => $study,
             'doctors'            => $doctors,
@@ -573,16 +573,43 @@ class StudyController extends BaseController
             ]));
         }
 
+        $mailNotice = '';
         if ($newDoctorId !== null && $newDoctorId !== $previousDoctorId) {
             $savedStudy = $studyModel->findByStudyUid($studyUid);
             if ($savedStudy !== null) {
-                (new NotificationService())->sendStudyAssignedEmail($studyUid, $savedStudy, $newDoctorId);
+                $sent       = (new NotificationService())->sendStudyAssignedEmail($studyUid, $savedStudy, $newDoctorId);
+                $mailNotice = $sent
+                    ? ' Aviso enviado por correo al médico asignado.'
+                    : ' (No se pudo enviar correo al médico; revisa SMTP y su email.)';
             }
         }
 
         AuditLogModel::record('study.case_updated', $studyUid, null, 'Prioridad: ' . $data['priority'], $this->request);
 
-        return redirect()->to('/studies/case/' . urlencode($studyUid))->with('message', 'Caso actualizado.');
+        return redirect()->to('/studies/case/' . urlencode($studyUid))->with('message', 'Caso actualizado.' . $mailNotice);
+    }
+
+    /////////////////////////////////////////////////////////////////////////////
+    // Reenvía el aviso por correo al médico actualmente asignado al caso.     //
+    /////////////////////////////////////////////////////////////////////////////
+    public function notifyAssignedDoctor(string $studyUid): RedirectResponse
+    {
+        $user = auth()->user();
+        if (! $user?->can('studies.assign')) {
+            return redirect()->to('/studies/case/' . urlencode($studyUid))->with('error', 'Sin permiso para enviar avisos.');
+        }
+
+        $study = model(StudyModel::class)->findByStudyUid($studyUid);
+        if (! user_can_access_study($user, $study) || empty($study['assigned_doctor_id'])) {
+            return redirect()->to('/studies/case/' . urlencode($studyUid))->with('error', 'Este caso no tiene un médico asignado.');
+        }
+
+        $sent = (new NotificationService())->sendStudyAssignedEmail($studyUid, $study, (int) $study['assigned_doctor_id']);
+        if ($sent) {
+            return redirect()->to('/studies/case/' . urlencode($studyUid))->with('message', 'Aviso enviado por correo al médico asignado.');
+        }
+
+        return redirect()->to('/studies/case/' . urlencode($studyUid))->with('error', 'No se pudo enviar el correo. Verifica la configuración SMTP y el email del médico.');
     }
 
     /////////////////////////////////////////////////////////////////////////////
@@ -627,7 +654,7 @@ class StudyController extends BaseController
         }
 
         return view('studies/dicom_edit', [
-            'title'     => 'Editar datos DICOM | PACS Online',
+            'title'     => 'Editar datos DICOM | PACSLine',
             'studyUid'  => $studyUid,
             'orthancId' => $orthancId,
             'centers'   => $centers,

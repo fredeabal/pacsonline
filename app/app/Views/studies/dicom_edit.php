@@ -1,4 +1,4 @@
-<?= view('template/header', ['title' => $title ?? 'Editar datos DICOM | PACS Online']) ?>
+<?= view('template/header', ['title' => $title ?? 'Editar datos DICOM | PACSLine']) ?>
 
 <?php /** Página dedicada para editar las etiquetas DICOM del paciente y del estudio. */ ?>
 <?php

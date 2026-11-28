@@ -24,7 +24,7 @@ class ProfileController extends BaseController
         }
 
         return view('profile/index', [
-            'title' => 'Mi Perfil | PACS Online',
+            'title' => 'Mi Perfil | PACSLine',
             'user'  => $user,
         ]);
     }

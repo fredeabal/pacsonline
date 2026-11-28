@@ -30,7 +30,7 @@ class UserController extends BaseController
         }
 
         return view('users/index', [
-            'title'       => 'Usuarios y Roles | PACS Online',
+            'title'       => 'Usuarios y Roles | PACSLine',
             'users'       => $users,
             'centersById' => $centersById,
         ]);
@@ -48,7 +48,7 @@ class UserController extends BaseController
         $centers = model(MedicalCenterModel::class)->where('active', 1)->orderBy('name', 'ASC')->findAll();
 
         return view('users/create', [
-            'title'   => 'Crear Usuario | PACS Online',
+            'title'   => 'Crear Usuario | PACSLine',
             'centers' => $centers,
         ]);
     }
@@ -161,7 +161,7 @@ class UserController extends BaseController
         $centers = model(MedicalCenterModel::class)->orderBy('name', 'ASC')->findAll();
 
         return view('users/edit', [
-            'title'   => 'Editar Usuario | PACS Online',
+            'title'   => 'Editar Usuario | PACSLine',
             'user'    => $user,
             'centers' => $centers,
         ]);

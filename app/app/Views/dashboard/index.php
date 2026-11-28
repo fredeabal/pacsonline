@@ -133,38 +133,85 @@
       </div>
     </div>
   <?php elseif ($roleMode === 'medico'): ?>
-    <div class="col-md-4">
-      <div class="card border-0 shadow-sm h-100">
-        <div class="card-body d-flex align-items-center gap-3">
-          <span class="rounded-3 bg-info-subtle text-info p-3"><i class="ti ti-clock fs-7"></i></span>
-          <div>
-            <span class="text-muted fs-2 d-block">Pendientes por Informar</span>
-            <h3 class="fw-bold mb-0" data-metric="pendingCount"><?= (int) $pendingCount ?></h3>
+    <!-- Fila 1: Prioridad y pendientes -->
+    <div class="col-sm-6 col-lg-4">
+      <a href="<?= base_url('reports?status=pending') ?>" class="text-decoration-none d-block h-100">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body d-flex align-items-center gap-3">
+            <span class="rounded-3 bg-danger-subtle text-danger p-3 flex-shrink-0"><i class="ti ti-alert-triangle fs-7"></i></span>
+            <div class="min-w-0">
+              <span class="text-muted fs-2 d-block">Urgentes</span>
+              <h3 class="fw-bold mb-0 text-body" data-metric="urgentCount"><?= (int) $urgentCount ?></h3>
+            </div>
           </div>
         </div>
-      </div>
+      </a>
     </div>
-    <div class="col-md-4">
-      <div class="card border-0 shadow-sm h-100">
-        <div class="card-body d-flex align-items-center gap-3">
-          <span class="rounded-3 bg-danger-subtle text-danger p-3"><i class="ti ti-alert-triangle fs-7"></i></span>
-          <div>
-            <span class="text-muted fs-2 d-block">Urgentes</span>
-            <h3 class="fw-bold mb-0" data-metric="urgentCount"><?= (int) $urgentCount ?></h3>
+    <div class="col-sm-6 col-lg-4">
+      <a href="<?= base_url('reports?scope=mine') ?>" class="text-decoration-none d-block h-100">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body d-flex align-items-center gap-3">
+            <span class="rounded-3 bg-primary-subtle text-primary p-3 flex-shrink-0"><i class="ti ti-user-check fs-7"></i></span>
+            <div class="min-w-0">
+              <span class="text-muted fs-2 d-block">Asignados a mí</span>
+              <h3 class="fw-bold mb-0 text-body" data-metric="assignedToMeCount"><?= (int) ($assignedToMeCount ?? 0) ?></h3>
+            </div>
           </div>
         </div>
-      </div>
+      </a>
     </div>
-    <div class="col-md-4">
-      <div class="card border-0 shadow-sm h-100">
-        <div class="card-body d-flex align-items-center gap-3">
-          <span class="rounded-3 bg-success-subtle text-success p-3"><i class="ti ti-file-check fs-7"></i></span>
-          <div>
-            <span class="text-muted fs-2 d-block">Informados</span>
-            <h3 class="fw-bold mb-0" data-metric="reportedCount"><?= (int) $reportedCount ?></h3>
+    <div class="col-sm-6 col-lg-4">
+      <a href="<?= base_url('reports?status=pending') ?>" class="text-decoration-none d-block h-100">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body d-flex align-items-center gap-3">
+            <span class="rounded-3 bg-info-subtle text-info p-3 flex-shrink-0"><i class="ti ti-clock fs-7"></i></span>
+            <div class="min-w-0">
+              <span class="text-muted fs-2 d-block">Pendientes por Informar</span>
+              <h3 class="fw-bold mb-0 text-body" data-metric="pendingCount"><?= (int) $pendingCount ?></h3>
+            </div>
           </div>
         </div>
-      </div>
+      </a>
+    </div>
+    <!-- Fila 2: En curso y completados -->
+    <div class="col-sm-6 col-lg-4">
+      <a href="<?= base_url('reports?status=in_review') ?>" class="text-decoration-none d-block h-100">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body d-flex align-items-center gap-3">
+            <span class="rounded-3 bg-warning-subtle text-warning p-3 flex-shrink-0"><i class="ti ti-file-pencil fs-7"></i></span>
+            <div class="min-w-0">
+              <span class="text-muted fs-2 d-block">Borradores</span>
+              <h3 class="fw-bold mb-0 text-body" data-metric="draftCount"><?= (int) ($draftCount ?? 0) ?></h3>
+            </div>
+          </div>
+        </div>
+      </a>
+    </div>
+    <div class="col-sm-6 col-lg-4">
+      <a href="<?= base_url('reports?status=reported&date_preset=today') ?>" class="text-decoration-none d-block h-100">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body d-flex align-items-center gap-3">
+            <span class="rounded-3 bg-success-subtle text-success p-3 flex-shrink-0"><i class="ti ti-checklist fs-7"></i></span>
+            <div class="min-w-0">
+              <span class="text-muted fs-2 d-block">Informados hoy</span>
+              <h3 class="fw-bold mb-0 text-body" data-metric="reportedTodayCount"><?= (int) ($reportedTodayCount ?? 0) ?></h3>
+            </div>
+          </div>
+        </div>
+      </a>
+    </div>
+    <div class="col-sm-6 col-lg-4">
+      <a href="<?= base_url('reports?status=reported') ?>" class="text-decoration-none d-block h-100">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body d-flex align-items-center gap-3">
+            <span class="rounded-3 bg-success-subtle text-success p-3 flex-shrink-0"><i class="ti ti-file-check fs-7"></i></span>
+            <div class="min-w-0">
+              <span class="text-muted fs-2 d-block">Informados (Total)</span>
+              <h3 class="fw-bold mb-0 text-body" data-metric="reportedCount"><?= (int) $reportedCount ?></h3>
+            </div>
+          </div>
+        </div>
+      </a>
     </div>
   <?php else: ?>
     <div class="col-sm-6 col-lg-4">
@@ -227,7 +274,7 @@
                 $barClass  = $usedPct >= 85 ? 'bg-danger' : ($usedPct >= 70 ? 'bg-warning' : 'bg-primary');
               ?>
               <div class="d-flex align-items-baseline justify-content-between gap-2">
-                <h3 class="fw-bold mb-0" data-metric="diskUsedPct"><?= number_format($usedPct, 1, ',', '.') ?>% ocupado</h3>
+                <h3 class="fw-bold mb-0" data-metric="diskUsedPct"><?= number_format($usedPct, 1, ',', '.') ?>%</h3>
                 <span class="text-muted small" data-metric="diskFreePct"><?= number_format($freePct, 1, ',', '.') ?>% libre</span>
               </div>
               <div class="progress mt-2" style="height: 6px;">
@@ -298,6 +345,9 @@
     setText('reportedCount', String(Number(data.reportedCount || 0)));
     setText('pendingCount', String(Number(data.pendingCount || 0)));
     setText('urgentCount', String(Number(data.urgentCount || 0)));
+    setText('assignedToMeCount', String(Number(data.assignedToMeCount || 0)));
+    setText('draftCount', String(Number(data.draftCount || 0)));
+    setText('reportedTodayCount', String(Number(data.reportedTodayCount || 0)));
 
     const stats = data.orthancStats || {};
     setText('countStudies', intFmt.format(Number(stats.CountStudies ?? data.totalStudies ?? 0)));
@@ -310,7 +360,7 @@
       const usedPct = Number(disk.used_pct || 0);
       const freePct = Number(disk.free_pct || 0);
       const tbDiv = 1024 ** 4;
-      setText('diskUsedPct', dec1Fmt.format(usedPct) + '% ocupado');
+      setText('diskUsedPct', dec1Fmt.format(usedPct) + '%');
       setText('diskFreePct', dec1Fmt.format(freePct) + '% libre');
       setText(
         'diskSummary',

@@ -26,7 +26,7 @@ class TemplateController extends BaseController
         $templates = $model->forUser((int) auth()->id());
 
         return view('templates/index', [
-            'title'     => 'Mis Plantillas | PACS Online',
+            'title'     => 'Mis Plantillas | PACSLine',
             'templates' => $templates,
         ]);
     }
@@ -41,7 +41,7 @@ class TemplateController extends BaseController
         }
 
         return view('templates/create', [
-            'title' => 'Nueva Plantilla | PACS Online',
+            'title' => 'Nueva Plantilla | PACSLine',
         ]);
     }
 
@@ -104,7 +104,7 @@ class TemplateController extends BaseController
         }
 
         return view('templates/edit', [
-            'title'    => 'Editar Plantilla | PACS Online',
+            'title'    => 'Editar Plantilla | PACSLine',
             'template' => $template,
         ]);
     }

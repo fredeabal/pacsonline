@@ -19,7 +19,7 @@
   <meta charset="UTF-8">
   <style>
     @page { size: A4 portrait; margin: 118px 48px 66px 48px; }
-    body { font-family: DejaVu Sans, sans-serif; color: #1e293b; font-size: 11.5px; line-height: 1.42; margin: 0; }
+    body { font-family: "DejaVu Sans", Arial, Helvetica, sans-serif; color: #1e293b; font-size: 11.5px; line-height: 1.42; margin: 0; }
     .header-bar {
       position: fixed;
       top: -88px;
@@ -67,9 +67,9 @@
     .qr-box { width: 84px; text-align: right; vertical-align: middle; padding-left: 8px; }
     .qr-caption { font-size: 8px; color: #64748b; display: block; margin-top: 2px; text-align: center; }
     .clinical-history {
-      font-family: DejaVu Serif, serif;
-      font-size: 13.5px;
-      line-height: 1.28;
+      font-family: "DejaVu Sans", Arial, Helvetica, sans-serif;
+      font-size: 11.5px;
+      line-height: 1.38;
       font-style: italic;
       color: #1e293b;
       background: #f8fafc;
@@ -81,7 +81,7 @@
     .clinical-history p { margin: 0 0 3px 0; }
     .clinical-history p:last-child { margin-bottom: 0; }
     .section-title {
-      font-size: 13px;
+      font-size: 12px;
       font-weight: bold;
       color: #1e3a8a;
       margin-top: 14px;
@@ -92,9 +92,9 @@
       letter-spacing: 0.5px;
     }
     .report-content {
-      font-family: DejaVu Serif, serif;
-      font-size: 14px;
-      line-height: 1.28;
+      font-family: "DejaVu Sans", Arial, Helvetica, sans-serif;
+      font-size: 12px;
+      line-height: 1.42;
       margin-bottom: 10px;
       text-align: justify;
       color: #0f172a;
@@ -228,7 +228,7 @@
           <div class="signature-meta">Transcrito por: <?= esc($transcriber->full_name ?: $transcriber->username) ?></div>
         <?php endif; ?>
       <?php else: ?>
-        <div class="signature-name"><?= esc($doctor ? ($doctor->full_name ?: $doctor->username) : 'Equipo Médico PACS Online') ?></div>
+        <div class="signature-name"><?= esc($doctor ? ($doctor->full_name ?: $doctor->username) : 'Equipo Médico PACSLine') ?></div>
         <?php if ($doctor && ! empty($doctor->specialty)): ?>
           <div class="signature-meta"><?= esc($doctor->specialty) ?></div>
         <?php endif; ?>

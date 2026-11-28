@@ -31,7 +31,7 @@ class AuthGroups extends ShieldAuthGroups
             'description' => 'Control total: configuración, usuarios, informes médicos, plantillas, edición DICOM, reenvío y eliminación.',
         ],
         'medico' => [
-            'title'       => 'Médico Informante',
+            'title'       => 'Médico',
             'description' => 'Revisa estudios en worklist, emite informes médicos, gestiona plantillas y enlaces de paciente.',
         ],
         'usuario' => [

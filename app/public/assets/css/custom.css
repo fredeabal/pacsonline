@@ -3612,7 +3612,7 @@ div:where(.swal2-container) div:where(.swal2-html-container) {
 }
 
 .table .badge {
-    min-width: 84px;
+    min-width: 96px;
     display: inline-flex;
     align-items: center;
     justify-content: center;

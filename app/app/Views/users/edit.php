@@ -37,7 +37,7 @@
           <select class="form-select" id="role" name="role" required>
             <option value="observador" <?= $currentRole === 'observador' ? 'selected' : '' ?>>Observador</option>
             <option value="usuario" <?= $currentRole === 'usuario' ? 'selected' : '' ?>>Usuario</option>
-            <option value="medico" <?= $currentRole === 'medico' ? 'selected' : '' ?>>Médico Informante</option>
+            <option value="medico" <?= $currentRole === 'medico' ? 'selected' : '' ?>>Médico</option>
             <option value="admin" <?= $currentRole === 'admin' ? 'selected' : '' ?>>Supervisor</option>
           </select>
         </div>

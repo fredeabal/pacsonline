@@ -43,12 +43,7 @@
               $groups    = $u->getGroups();
               $role      = $groups[0] ?? 'observador';
               $roleLabel = $roleGroups[$role]['title'] ?? ucfirst($role);
-              $badge     = match ($role) {
-                  'admin'   => 'bg-danger-subtle text-danger border border-danger-subtle fs-2',
-                  'medico'  => 'bg-primary-subtle text-primary border border-primary-subtle fs-2',
-                  'usuario' => 'bg-info-subtle text-info border border-info-subtle fs-2',
-                  default   => 'bg-secondary-subtle text-secondary border border-secondary-subtle fs-2',
-              };
+              $badge     = 'bg-primary-subtle text-primary border border-primary-subtle fs-2';
             ?>
             <tr style="cursor: pointer;" onclick="window.location.href='<?= base_url('users/edit/' . (int) $u->id) ?>'">
               <td>
@@ -117,12 +112,7 @@
           $groups    = $u->getGroups();
           $role      = $groups[0] ?? 'observador';
           $roleLabel = $roleGroups[$role]['title'] ?? ucfirst($role);
-          $badge     = match ($role) {
-              'admin'   => 'bg-danger-subtle text-danger border border-danger-subtle fs-2',
-              'medico'  => 'bg-primary-subtle text-primary border border-primary-subtle fs-2',
-              'usuario' => 'bg-info-subtle text-info border border-info-subtle fs-2',
-              default   => 'bg-secondary-subtle text-secondary border border-secondary-subtle fs-2',
-          };
+          $badge     = 'bg-primary-subtle text-primary border border-primary-subtle fs-2';
         ?>
         <div class="card border shadow-sm mb-3 mobile-card-item" style="cursor: pointer;" onclick="window.location.href='<?= base_url('users/edit/' . (int) $u->id) ?>'">
           <div class="card-body p-3 d-flex align-items-center justify-content-between gap-2">
